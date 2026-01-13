@@ -30,9 +30,7 @@ const setupDb = async () => {
     console.log('Schema migration completed successfully.');
   } catch (error) {
     console.error('Error running schema migration:', error);
-    if (error.code === '42710') {
-        console.log('Hint: Some objects (like types) might already exist. This is usually fine if tables were created.');
-    }
+    process.exit(1);
   } finally {
     await pool.end();
   }

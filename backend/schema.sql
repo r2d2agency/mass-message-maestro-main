@@ -2,7 +2,7 @@
 -- Execute este SQL no PostgreSQL do Easypanel
 
 -- Users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -12,9 +12,13 @@ CREATE TABLE users (
 );
 
 -- User roles (for future admin functionality)
-CREATE TYPE app_role AS ENUM ('admin', 'user');
+DO $$ BEGIN
+    CREATE TYPE app_role AS ENUM ('admin', 'user');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TABLE user_roles (
+CREATE TABLE IF NOT EXISTS user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     role app_role NOT NULL DEFAULT 'user',
@@ -22,7 +26,7 @@ CREATE TABLE user_roles (
 );
 
 -- Evolution API Connections (each user has their own)
-CREATE TABLE connections (
+CREATE TABLE IF NOT EXISTS connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -36,7 +40,7 @@ CREATE TABLE connections (
 );
 
 -- Contact Lists (each user has their own lists)
-CREATE TABLE contact_lists (
+CREATE TABLE IF NOT EXISTS contact_lists (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -45,7 +49,7 @@ CREATE TABLE contact_lists (
 );
 
 -- Contacts (belong to contact lists)
-CREATE TABLE contacts (
+CREATE TABLE IF NOT EXISTS contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     list_id UUID REFERENCES contact_lists(id) ON DELETE CASCADE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -54,7 +58,7 @@ CREATE TABLE contacts (
 );
 
 -- Message Templates (each user has their own templates)
-CREATE TABLE message_templates (
+CREATE TABLE IF NOT EXISTS message_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -64,7 +68,7 @@ CREATE TABLE message_templates (
 );
 
 -- Campaigns (each user has their own campaigns)
-CREATE TABLE campaigns (
+CREATE TABLE IF NOT EXISTS campaigns (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -82,7 +86,7 @@ CREATE TABLE campaigns (
 );
 
 -- Campaign Messages (log of each message sent)
-CREATE TABLE campaign_messages (
+CREATE TABLE IF NOT EXISTS campaign_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     campaign_id UUID REFERENCES campaigns(id) ON DELETE CASCADE NOT NULL,
     contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
@@ -95,9 +99,9 @@ CREATE TABLE campaign_messages (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_connections_user_id ON connections(user_id);
-CREATE INDEX idx_contact_lists_user_id ON contact_lists(user_id);
-CREATE INDEX idx_contacts_list_id ON contacts(list_id);
+CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id);
+CREATE INDEX IF NOT EXISTS idx_contact_lists_user_id ON contact_lists(user_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_list_id ON contacts(list_id);
 CREATE INDEX idx_message_templates_user_id ON message_templates(user_id);
 CREATE INDEX idx_campaigns_user_id ON campaigns(user_id);
 CREATE INDEX idx_campaign_messages_campaign_id ON campaign_messages(campaign_id);
