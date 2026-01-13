@@ -7,6 +7,7 @@ import messagesRoutes from './routes/messages.js';
 import contactsRoutes from './routes/contacts.js';
 import campaignsRoutes from './routes/campaigns.js';
 import { testConnection } from './db.js';
+import { startWorker } from './services/worker.js';
 
 dotenv.config();
 
@@ -17,6 +18,9 @@ const PORT = process.env.PORT || 3001;
 testConnection().then(connected => {
   if (!connected) {
     console.error('CRITICAL: Could not connect to database. Server may not function correctly.');
+  } else {
+    // Start the worker only if DB is connected
+    startWorker();
   }
 });
 

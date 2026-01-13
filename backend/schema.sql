@@ -73,8 +73,8 @@ CREATE TABLE campaigns (
     message_id UUID REFERENCES message_templates(id) ON DELETE SET NULL,
     status VARCHAR(50) DEFAULT 'pending',
     scheduled_at TIMESTAMP WITH TIME ZONE,
-    min_delay INTEGER DEFAULT 5,
-    max_delay INTEGER DEFAULT 15,
+    min_delay INTEGER DEFAULT 90,
+    max_delay INTEGER DEFAULT 300,
     sent_count INTEGER DEFAULT 0,
     failed_count INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -88,6 +88,7 @@ CREATE TABLE campaign_messages (
     contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
     phone VARCHAR(50) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
+    scheduled_for TIMESTAMP WITH TIME ZONE, -- New column for individual schedule
     sent_at TIMESTAMP WITH TIME ZONE,
     error_message TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

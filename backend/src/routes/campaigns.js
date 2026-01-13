@@ -70,12 +70,20 @@ router.post('/', async (req, res) => {
         list_id, 
         message_id, 
         scheduled_at || null,
-        min_delay || 5,
-        max_delay || 15
+        min_delay || 90,
+        max_delay || 300
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const campaign = result.rows[0];
+
+    // Trigger scheduling
+    // We don't await this so the UI response is fast
+    scheduleCampaign(campaign.id).catch(err => 
+      console.error(`Failed to schedule campaign ${campaign.id}:`, err)
+    );
+
+    res.status(201).json(campaign);
   } catch (error) {
     console.error('Create campaign error:', error);
     res.status(500).json({ error: 'Erro ao criar campanha' });
