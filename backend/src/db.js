@@ -5,6 +5,14 @@ dotenv.config();
 
 const { Pool } = pg;
 
+// Validate DATABASE_URL existence
+if (!process.env.DATABASE_URL) {
+  console.error('❌ CRITICAL ERROR: DATABASE_URL environment variable is MISSING!');
+  console.error('The application cannot start without a database connection.');
+  console.error('Please ensure DATABASE_URL is defined in your environment variables.');
+  process.exit(1);
+}
+
 const parseConnectionString = (url) => {
   try {
     if (!url) return {};
