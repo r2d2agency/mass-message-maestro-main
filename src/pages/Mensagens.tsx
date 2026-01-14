@@ -174,6 +174,16 @@ const Mensagens = () => {
     return counts;
   };
 
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    const items = Array.from(messageItems);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    setMessageItems(items);
+  };
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -300,18 +310,38 @@ const Mensagens = () => {
                   {/* Message Items List */}
                   <div className="space-y-3">
                     <Label>Blocos da Mensagem</Label>
-                    <div className="space-y-3">
-                      {messageItems.map((item, index) => (
-                        <MessageItemEditor
-                          key={item.id}
-                          item={item}
-                          index={index}
-                          onUpdate={updateMessageItem}
-                          onDelete={deleteMessageItem}
-                          insertVariable={insertVariable}
-                        />
-                      ))}
-                    </div>
+                    <DragDropContext onDragEnd={handleDragEnd}>
+                      <Droppable droppableId="message-items">
+                        {(provided) => (
+                          <div
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                            className="space-y-3"
+                          >
+                            {messageItems.map((item, index) => (
+                              <Draggable key={item.id} draggableId={item.id} index={index}>
+                                {(provided) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                  >
+                                    <MessageItemEditor
+                                      item={item}
+                                      index={index}
+                                      onUpdate={updateMessageItem}
+                                      onDelete={deleteMessageItem}
+                                      insertVariable={insertVariable}
+                                      dragHandleProps={provided.dragHandleProps}
+                                    />
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
 
                     <AddMessageButton onAdd={addMessageItem} />
                   </div>

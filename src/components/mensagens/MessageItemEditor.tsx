@@ -33,6 +33,7 @@ interface MessageItemEditorProps {
   onUpdate: (id: string, updates: Partial<MessageItem>) => void;
   onDelete: (id: string) => void;
   insertVariable: (id: string, variable: string) => void;
+  dragHandleProps?: any;
 }
 
 const typeConfig = {
@@ -68,6 +69,7 @@ export function MessageItemEditor({
   onUpdate,
   onDelete,
   insertVariable,
+  dragHandleProps,
 }: MessageItemEditorProps) {
   const config = typeConfig[item.type];
   const Icon = config.icon;
@@ -169,7 +171,10 @@ export function MessageItemEditor({
     <div className="group relative rounded-lg border border-border bg-card p-4 transition-all hover:border-primary/50">
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="flex items-center gap-2 text-muted-foreground cursor-grab">
+        <div
+          className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing outline-none"
+          {...dragHandleProps}
+        >
           <GripVertical className="h-4 w-4" />
         </div>
         <div className={cn("flex items-center gap-2 px-2 py-1 rounded-md", config.bgColor)}>
@@ -215,13 +220,17 @@ export function MessageItemEditor({
         <div className="space-y-3">
           {/* Media Upload */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">URL da mídia</Label>
+            <Label className="text-xs text-muted-foreground">
+              {item.type === "image" ? "Imagem" : "URL da mídia"}
+            </Label>
             <div className="flex gap-2 items-center">
-              <Input
-                placeholder={`URL do ${config.label.toLowerCase()}`}
-                value={item.mediaUrl || ""}
-                onChange={(e) => onUpdate(item.id, { mediaUrl: e.target.value })}
-              />
+              {item.type !== "image" && (
+                <Input
+                  placeholder={`URL do ${config.label.toLowerCase()}`}
+                  value={item.mediaUrl || ""}
+                  onChange={(e) => onUpdate(item.id, { mediaUrl: e.target.value })}
+                />
+              )}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -237,15 +246,31 @@ export function MessageItemEditor({
                 className="hidden"
                 onChange={handleFileChange}
               />
-              <Button
-                variant="outline"
-                size="icon"
-                className="shrink-0"
-                onClick={handleUploadClick}
-                disabled={isUploading}
-              >
-                <Upload className="h-4 w-4" />
-              </Button>
+              {item.type === "image" ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleUploadClick}
+                  disabled={isUploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading
+                    ? "Enviando..."
+                    : item.mediaUrl
+                    ? "Alterar Imagem"
+                    : "Carregar Imagem"}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={handleUploadClick}
+                  disabled={isUploading}
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
 
