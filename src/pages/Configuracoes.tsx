@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,97 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Settings, Shield, Bell, Save } from "lucide-react";
 
+const SETTINGS_STORAGE_KEY = "app_settings";
+
+interface AppSettings {
+  darkMode: boolean;
+  autoRefresh: boolean;
+  notifyCampaignCompleted: boolean;
+  notifySendErrors: boolean;
+  notifyConnectionLost: boolean;
+  dailyLimit: number | null;
+  minPauseSeconds: number | null;
+  maxPauseSeconds: number | null;
+}
+
 const Configuracoes = () => {
+  const [darkMode, setDarkMode] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [notifyCampaignCompleted, setNotifyCampaignCompleted] = useState(true);
+  const [notifySendErrors, setNotifySendErrors] = useState(true);
+  const [notifyConnectionLost, setNotifyConnectionLost] = useState(true);
+  const [dailyLimit, setDailyLimit] = useState("");
+  const [minPause, setMinPause] = useState("");
+  const [maxPause, setMaxPause] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as Partial<AppSettings>;
+
+      if (typeof parsed.darkMode === "boolean") {
+        setDarkMode(parsed.darkMode);
+      }
+      if (typeof parsed.autoRefresh === "boolean") {
+        setAutoRefresh(parsed.autoRefresh);
+      }
+      if (typeof parsed.notifyCampaignCompleted === "boolean") {
+        setNotifyCampaignCompleted(parsed.notifyCampaignCompleted);
+      }
+      if (typeof parsed.notifySendErrors === "boolean") {
+        setNotifySendErrors(parsed.notifySendErrors);
+      }
+      if (typeof parsed.notifyConnectionLost === "boolean") {
+        setNotifyConnectionLost(parsed.notifyConnectionLost);
+      }
+      if (typeof parsed.dailyLimit === "number" && Number.isFinite(parsed.dailyLimit)) {
+        setDailyLimit(String(parsed.dailyLimit));
+      }
+      if (
+        typeof parsed.minPauseSeconds === "number" &&
+        Number.isFinite(parsed.minPauseSeconds)
+      ) {
+        setMinPause(String(parsed.minPauseSeconds));
+      }
+      if (
+        typeof parsed.maxPauseSeconds === "number" &&
+        Number.isFinite(parsed.maxPauseSeconds)
+      ) {
+        setMaxPause(String(parsed.maxPauseSeconds));
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  const handleSave = () => {
+    if (typeof window === "undefined") return;
+
+    const toNumberOrNull = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const n = Number(trimmed);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
+    const settings: AppSettings = {
+      darkMode,
+      autoRefresh,
+      notifyCampaignCompleted,
+      notifySendErrors,
+      notifyConnectionLost,
+      dailyLimit: toNumberOrNull(dailyLimit),
+      minPauseSeconds: toNumberOrNull(minPause),
+      maxPauseSeconds: toNumberOrNull(maxPause),
+    };
+
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  };
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -38,7 +129,7 @@ const Configuracoes = () => {
                     Ativar tema escuro na interface
                   </p>
                 </div>
-                <Switch />
+                <Switch checked={darkMode} onCheckedChange={setDarkMode} />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -47,7 +138,10 @@ const Configuracoes = () => {
                     Atualizar dados automaticamente
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={autoRefresh}
+                  onCheckedChange={setAutoRefresh}
+                />
               </div>
             </CardContent>
           </Card>
@@ -71,7 +165,10 @@ const Configuracoes = () => {
                     Notificar quando uma campanha terminar
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={notifyCampaignCompleted}
+                  onCheckedChange={setNotifyCampaignCompleted}
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -80,7 +177,10 @@ const Configuracoes = () => {
                     Alertar sobre falhas de entrega
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={notifySendErrors}
+                  onCheckedChange={setNotifySendErrors}
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -89,7 +189,10 @@ const Configuracoes = () => {
                     Notificar se a conexão cair
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={notifyConnectionLost}
+                  onCheckedChange={setNotifyConnectionLost}
+                />
               </div>
             </CardContent>
           </Card>
@@ -113,6 +216,8 @@ const Configuracoes = () => {
                     id="maxMessagesDay"
                     type="number"
                     placeholder="Informe o limite diário"
+                    value={dailyLimit}
+                    onChange={(e) => setDailyLimit(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
                     Máximo de mensagens por dia
@@ -124,6 +229,8 @@ const Configuracoes = () => {
                     id="minPause"
                     type="number"
                     placeholder="Informe a pausa mínima"
+                    value={minPause}
+                    onChange={(e) => setMinPause(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
                     Mínimo entre mensagens
@@ -135,6 +242,8 @@ const Configuracoes = () => {
                     id="maxPause"
                     type="number"
                     placeholder="Informe a pausa máxima"
+                    value={maxPause}
+                    onChange={(e) => setMaxPause(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
                     Máximo entre mensagens
@@ -146,7 +255,7 @@ const Configuracoes = () => {
         </div>
 
         <div className="flex justify-end">
-          <Button variant="gradient" size="lg">
+          <Button variant="gradient" size="lg" onClick={handleSave}>
             <Save className="h-4 w-4" />
             Salvar Todas as Configurações
           </Button>
