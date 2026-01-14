@@ -33,9 +33,19 @@ const setupDb = async () => {
     try {
       console.log('Verifying schema updates...');
       await pool.query('ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS end_at TIMESTAMP WITH TIME ZONE;');
-      console.log('Verified: end_at column exists.');
+      console.log('Verified: campaigns.end_at column exists.');
+
+      // Fix missing status in users table
+      await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';");
+      console.log('Verified: users.status column exists.');
+
+      // Fix missing columns in campaign_messages table
+      await pool.query('ALTER TABLE campaign_messages ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMP WITH TIME ZONE;');
+      await pool.query('ALTER TABLE campaign_messages ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE;');
+      console.log('Verified: campaign_messages columns exist.');
+
     } catch (err) {
-      console.warn('Manual check for end_at column failed:', err.message);
+      console.warn('Manual check for schema updates failed:', err.message);
     }
 
   } catch (error) {
