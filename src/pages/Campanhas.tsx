@@ -47,6 +47,14 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
+const SETTINGS_STORAGE_KEY = "app_settings";
+
+interface AppSettings {
+  dailyLimit: number | null;
+  minPauseSeconds: number | null;
+  maxPauseSeconds: number | null;
+}
+
 type UiCampaignStatus = "scheduled" | "running" | "completed" | "paused";
 
 interface Campaign {
@@ -174,6 +182,7 @@ const Campanhas = () => {
     pending: 0,
   });
   const [isLoadingMonitor, setIsLoadingMonitor] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -240,6 +249,38 @@ const Campanhas = () => {
     loadInitialData();
   }, [toast]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as Partial<AppSettings>;
+
+      const settings: AppSettings = {
+        dailyLimit:
+          typeof parsed.dailyLimit === "number" && Number.isFinite(parsed.dailyLimit)
+            ? parsed.dailyLimit
+            : null,
+        minPauseSeconds:
+          typeof parsed.minPauseSeconds === "number" &&
+          Number.isFinite(parsed.minPauseSeconds)
+            ? parsed.minPauseSeconds
+            : null,
+        maxPauseSeconds:
+          typeof parsed.maxPauseSeconds === "number" &&
+          Number.isFinite(parsed.maxPauseSeconds)
+            ? parsed.maxPauseSeconds
+            : null,
+      };
+
+      setAppSettings(settings);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const handleCreateCampaign = async () => {
     if (!campaignName.trim()) {
       toast({
@@ -271,6 +312,15 @@ const Campanhas = () => {
     if (contactCount <= 0) {
       toast({
         title: "A lista selecionada não possui contatos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (appSettings?.dailyLimit && contactCount > appSettings.dailyLimit) {
+      toast({
+        title: "Limite diário de mensagens excedido",
+        description: `A lista selecionada possui ${contactCount} contatos e o limite diário configurado é ${appSettings.dailyLimit}. Ajuste o limite em Configurações ou utilize uma lista menor.`,
         variant: "destructive",
       });
       return;
@@ -317,8 +367,20 @@ const Campanhas = () => {
     }
 
     const avgInterval = effectiveSeconds / contactCount;
-    const min_delay = Math.max(Math.floor(avgInterval * 0.6), 10);
-    const max_delay = Math.max(Math.floor(avgInterval * 1.4), min_delay + 5);
+    let min_delay = Math.max(Math.floor(avgInterval * 0.6), 10);
+    let max_delay = Math.max(Math.floor(avgInterval * 1.4), min_delay + 5);
+
+    if (appSettings?.minPauseSeconds && appSettings.minPauseSeconds > 0) {
+      min_delay = Math.max(min_delay, appSettings.minPauseSeconds);
+    }
+
+    if (appSettings?.maxPauseSeconds && appSettings.maxPauseSeconds > 0) {
+      max_delay = Math.max(max_delay, appSettings.maxPauseSeconds);
+    }
+
+    if (max_delay <= min_delay) {
+      max_delay = min_delay + 5;
+    }
 
     let scheduled_at: string | null = null;
     scheduled_at = startDateTime.toISOString();
