@@ -400,21 +400,49 @@ const Contatos = () => {
         targetListId = createdList.id;
       }
 
-      const importResponse = await api<ImportResult>(
-        `/api/contacts/lists/${targetListId}/import`,
-        {
-          method: "POST",
-          body: { contacts: contactsToImport },
-        }
-      );
+      // Process in chunks of 50 to avoid timeout/payload issues
+      const CHUNK_SIZE = 50;
+      const totalContacts = contactsToImport.length;
+      
+      const accumulatedResult: ImportResult = {
+        success: true,
+        total: 0,
+        imported: 0,
+        totalWhatsapp: 0,
+        totalErrors: 0
+      };
 
-      setImportResult(importResponse);
+      for (let i = 0; i < totalContacts; i += CHUNK_SIZE) {
+        const chunk = contactsToImport.slice(i, i + CHUNK_SIZE);
+        
+        try {
+          const chunkResponse = await api<ImportResult>(
+            `/api/contacts/lists/${targetListId}/import`,
+            {
+              method: "POST",
+              body: { contacts: chunk },
+            }
+          );
+
+          accumulatedResult.total += chunkResponse.total;
+          accumulatedResult.imported += chunkResponse.imported;
+          accumulatedResult.totalWhatsapp += chunkResponse.totalWhatsapp;
+          accumulatedResult.totalErrors += chunkResponse.totalErrors;
+        } catch (err) {
+          console.error(`Error importing chunk ${i}:`, err);
+          accumulatedResult.totalErrors += chunk.length;
+          // Continue to next chunk even if one fails
+        }
+      }
+
+      setImportResult(accumulatedResult);
+
       if (importTargetMode === "new" && createdList) {
         setLists((prev) => [
           {
             id: createdList.id,
             name: createdList.name,
-            contactCount: importResponse.imported,
+            contactCount: accumulatedResult.imported,
             createdAt: new Date(createdList.created_at).toLocaleDateString(
               "pt-BR"
             ),
@@ -425,13 +453,13 @@ const Contatos = () => {
         setLists((prev) =>
           prev.map((list) =>
             list.id === targetListId
-              ? { ...list, contactCount: list.contactCount + importResponse.imported }
+              ? { ...list, contactCount: list.contactCount + accumulatedResult.imported }
               : list
           )
         );
       }
 
-      if (importResponse.imported > 0) {
+      if (accumulatedResult.imported > 0) {
         const refreshedContacts = await api<ApiContact[]>(
           `/api/contacts/lists/${targetListId}/contacts`
         );
@@ -449,7 +477,7 @@ const Contatos = () => {
 
       toast({
         title: "Importação concluída",
-        description: `Total no arquivo: ${importResponse.total} | Com WhatsApp: ${importResponse.totalWhatsapp} | Importados: ${importResponse.imported} | Com erros: ${importResponse.totalErrors}`,
+        description: `Total no arquivo: ${accumulatedResult.total} | Com WhatsApp: ${accumulatedResult.totalWhatsapp} | Importados: ${accumulatedResult.imported} | Com erros: ${accumulatedResult.totalErrors}`,
       });
     } catch (error) {
       toast({
