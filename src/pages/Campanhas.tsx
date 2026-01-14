@@ -332,6 +332,7 @@ const Campanhas = () => {
           list_id: selectedListId,
           message_id: selectedMessageId,
           scheduled_at,
+          end_at: endDateTime.toISOString(),
           min_delay,
           max_delay,
         },

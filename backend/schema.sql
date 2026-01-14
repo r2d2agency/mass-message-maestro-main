@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     message_id UUID REFERENCES message_templates(id) ON DELETE SET NULL,
     status VARCHAR(50) DEFAULT 'pending',
     scheduled_at TIMESTAMP WITH TIME ZONE,
+    end_at TIMESTAMP WITH TIME ZONE,
     min_delay INTEGER DEFAULT 90,
     max_delay INTEGER DEFAULT 300,
     sent_count INTEGER DEFAULT 0,
@@ -127,3 +128,5 @@ CREATE INDEX idx_message_templates_user_id ON message_templates(user_id);
 CREATE INDEX idx_campaigns_user_id ON campaigns(user_id);
 CREATE INDEX idx_campaign_messages_campaign_id ON campaign_messages(campaign_id);
 CREATE INDEX idx_campaign_messages_status ON campaign_messages(status);
+
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS end_at TIMESTAMP WITH TIME ZONE;

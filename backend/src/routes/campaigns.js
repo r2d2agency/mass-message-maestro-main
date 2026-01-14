@@ -39,6 +39,7 @@ router.post('/', async (req, res) => {
       list_id, 
       message_id, 
       scheduled_at,
+      end_at,
       min_delay,
       max_delay 
     } = req.body;
@@ -62,8 +63,8 @@ router.post('/', async (req, res) => {
 
     const result = await query(
       `INSERT INTO campaigns 
-       (user_id, name, connection_id, list_id, message_id, scheduled_at, min_delay, max_delay)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+       (user_id, name, connection_id, list_id, message_id, scheduled_at, end_at, min_delay, max_delay)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
        RETURNING *`,
       [
         req.userId, 
@@ -72,6 +73,7 @@ router.post('/', async (req, res) => {
         list_id, 
         message_id, 
         scheduled_at || null,
+        end_at || null,
         min_delay || 90,
         max_delay || 300
       ]
