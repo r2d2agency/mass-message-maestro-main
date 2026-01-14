@@ -121,7 +121,6 @@ router.post('/lists/:listId/contacts', async (req, res) => {
       return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
     }
 
-    // Verify list belongs to user
     const listCheck = await query(
       'SELECT id FROM contact_lists WHERE id = $1 AND user_id = $2',
       [listId, req.userId]
@@ -131,9 +130,92 @@ router.post('/lists/:listId/contacts', async (req, res) => {
       return res.status(404).json({ error: 'Lista não encontrada' });
     }
 
+    const rawPhone = phone.toString().trim();
+    const normalizedPhone = rawPhone.replace(/\D/g, '');
+    const MIN_PHONE_LENGTH = 8;
+
+    if (!normalizedPhone || normalizedPhone.length < MIN_PHONE_LENGTH) {
+      return res.status(400).json({ error: 'Número de telefone inválido' });
+    }
+
+    const connectionResult = await query(
+      `SELECT api_url, api_key, instance_name
+       FROM connections
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [req.userId]
+    );
+
+    if (connectionResult.rows.length === 0) {
+      return res.status(400).json({
+        error: 'Configure uma conexão Evolution antes de adicionar contatos',
+      });
+    }
+
+    const { api_url, api_key, instance_name } = connectionResult.rows[0];
+
+    let isWhatsapp = false;
+
+    try {
+      const evoResponse = await fetch(
+        `${api_url}/chat/whatsappNumbers/${instance_name}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: api_key,
+          },
+          body: JSON.stringify({ numbers: [normalizedPhone] }),
+        }
+      );
+
+      if (!evoResponse.ok) {
+        console.error('Evolution whatsappNumbers error status (single):', evoResponse.status);
+        return res.status(502).json({
+          error: 'Não foi possível validar o número com a Evolution API',
+        });
+      }
+
+      const evoData = await evoResponse.json();
+
+      const resultsArray = Array.isArray(evoData)
+        ? evoData
+        : Array.isArray(evoData.numbers)
+        ? evoData.numbers
+        : Array.isArray(evoData.result)
+        ? evoData.result
+        : Array.isArray(evoData.response)
+        ? evoData.response
+        : [];
+
+      for (const item of resultsArray) {
+        const num = (item.number || item.phone || '').toString().replace(/\D/g, '');
+        const exists =
+          item.exists === true ||
+          item.isWhatsapp === true ||
+          item.is_whatsapp === true ||
+          item.isWhatsApp === true;
+
+        if (num === normalizedPhone && exists) {
+          isWhatsapp = true;
+          break;
+        }
+      }
+    } catch (err) {
+      console.error('Evolution whatsappNumbers request failed (single):', err);
+      return res.status(502).json({
+        error: 'Não foi possível validar o número com a Evolution API',
+      });
+    }
+
+    if (!isWhatsapp) {
+      return res.status(400).json({ error: 'Número não é WhatsApp válido' });
+    }
+
     const result = await query(
       'INSERT INTO contacts (list_id, name, phone) VALUES ($1, $2, $3) RETURNING *',
-      [listId, name, phone]
+      [listId, name, normalizedPhone]
     );
 
     res.status(201).json(result.rows[0]);

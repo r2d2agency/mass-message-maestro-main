@@ -7,6 +7,7 @@ import {
   Send,
   Settings,
   Zap,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,7 +23,7 @@ const navigation = [
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -62,6 +63,25 @@ export function Sidebar() {
               </Link>
             );
           })}
+          {user?.role === "admin" && (
+            <Link
+              to="/usuarios"
+              className={cn(
+                "mt-4 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                location.pathname === "/usuarios"
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Shield
+                className={cn(
+                  "h-5 w-5",
+                  location.pathname === "/usuarios" && "text-primary"
+                )}
+              />
+              Usuários
+            </Link>
+          )}
         </nav>
 
         <div className="border-t border-border p-4">
@@ -74,7 +94,7 @@ export function Sidebar() {
             <Zap className="h-4 w-4" />
           </Button>
           <p className="text-xs text-muted-foreground">
-            Versão 1.0.0 • Blaster
+            Versão 1.0.3 • Blaster
           </p>
         </div>
       </div>

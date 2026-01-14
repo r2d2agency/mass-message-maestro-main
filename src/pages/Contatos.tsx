@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye } from "lucide-react";
+31→import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,7 +58,6 @@ interface ApiContact {
   name: string;
   phone: string;
   list_id: string;
-  list_name: string;
 }
 
 interface ImportResult {
@@ -77,6 +76,13 @@ interface CsvColumnPreview {
 
 type MappedField = "none" | "name" | "phone";
 
+interface ApiCreatedContact {
+  id: string;
+  name: string;
+  phone: string;
+  list_id: string;
+}
+
 const Contatos = () => {
   const [selectedList, setSelectedList] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -90,6 +96,12 @@ const Contatos = () => {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [columnPreviews, setColumnPreviews] = useState<CsvColumnPreview[]>([]);
   const [columnMappings, setColumnMappings] = useState<Record<number, MappedField>>({});
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [importTargetMode, setImportTargetMode] = useState<"new" | "existing">("new");
+  const [importTargetListId, setImportTargetListId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -243,14 +255,6 @@ const Contatos = () => {
 
   const handleImport = async () => {
     try {
-      if (!newListName.trim()) {
-        toast({
-          title: "Informe o nome da lista",
-          variant: "destructive",
-        });
-        return;
-      }
-
       if (!uploadFile) {
         toast({
           title: "Selecione um arquivo para importação",
@@ -351,14 +355,34 @@ const Contatos = () => {
         });
         return;
       }
+      if (importTargetMode === "new" && !newListName.trim()) {
+        toast({
+          title: "Informe o nome da lista",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (importTargetMode === "existing" && !importTargetListId) {
+        toast({
+          title: "Selecione uma lista de destino",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      const createdList = await api<ApiContactList>("/api/contacts/lists", {
-        method: "POST",
-        body: { name: newListName.trim() },
-      });
+      let targetListId = importTargetListId;
+      let createdList: ApiContactList | null = null;
+
+      if (importTargetMode === "new") {
+        createdList = await api<ApiContactList>("/api/contacts/lists", {
+          method: "POST",
+          body: { name: newListName.trim() },
+        });
+        targetListId = createdList.id;
+      }
 
       const importResponse = await api<ImportResult>(
-        `/api/contacts/lists/${createdList.id}/import`,
+        `/api/contacts/lists/${targetListId}/import`,
         {
           method: "POST",
           body: { contacts: contactsToImport },
@@ -366,22 +390,31 @@ const Contatos = () => {
       );
 
       setImportResult(importResponse);
-
-      setLists((prev) => [
-        {
-          id: createdList.id,
-          name: createdList.name,
-          contactCount: importResponse.imported,
-          createdAt: new Date(createdList.created_at).toLocaleDateString(
-            "pt-BR"
-          ),
-        },
-        ...prev,
-      ]);
+      if (importTargetMode === "new" && createdList) {
+        setLists((prev) => [
+          {
+            id: createdList.id,
+            name: createdList.name,
+            contactCount: importResponse.imported,
+            createdAt: new Date(createdList.created_at).toLocaleDateString(
+              "pt-BR"
+            ),
+          },
+          ...prev,
+        ]);
+      } else if (targetListId) {
+        setLists((prev) =>
+          prev.map((list) =>
+            list.id === targetListId
+              ? { ...list, contactCount: list.contactCount + importResponse.imported }
+              : list
+          )
+        );
+      }
 
       if (importResponse.imported > 0) {
         const refreshedContacts = await api<ApiContact[]>(
-          `/api/contacts/lists/${createdList.id}/contacts`
+          `/api/contacts/lists/${targetListId}/contacts`
         );
 
         setContacts((prev) => [
@@ -418,6 +451,74 @@ const Contatos = () => {
         contact.phone.includes(searchTerm))
   );
 
+  const handleCreateContact = async () => {
+    try {
+      if (!selectedList) {
+        toast({
+          title: "Selecione uma lista para adicionar o contato",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!newContactName.trim() || !newContactPhone.trim()) {
+        toast({
+          title: "Nome e telefone são obrigatórios",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsCreating(true);
+
+      const created = await api<ApiCreatedContact>(
+        `/api/contacts/lists/${selectedList}/contacts`,
+        {
+          method: "POST",
+          body: {
+            name: newContactName.trim(),
+            phone: newContactPhone.trim(),
+          },
+        }
+      );
+
+      setContacts((prev) => [
+        ...prev,
+        {
+          id: created.id,
+          name: created.name,
+          phone: created.phone,
+          listId: created.list_id,
+        },
+      ]);
+
+      setLists((prev) =>
+        prev.map((list) =>
+          list.id === selectedList
+            ? { ...list, contactCount: list.contactCount + 1 }
+            : list
+        )
+      );
+
+      setNewContactName("");
+      setNewContactPhone("");
+      setIsCreateOpen(false);
+
+      toast({
+        title: "Contato criado com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao criar contato",
+        description:
+          error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -429,30 +530,121 @@ const Contatos = () => {
               Gerencie suas listas de contatos
             </p>
           </div>
-          <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-            <DialogTrigger asChild>
-              <Button variant="gradient">
-                <Upload className="h-4 w-4" />
-                Importar Lista
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Importar Lista de Contatos</DialogTitle>
-                <DialogDescription>
-                  Faça upload de uma planilha com os contatos (CSV ou Excel)
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="listName">Nome da Lista</Label>
-                  <Input
-                    id="listName"
-                    placeholder="Nome da lista"
-                    value={newListName}
-                    onChange={(e) => setNewListName(e.target.value)}
-                  />
-                </div>
+          <div className="flex items-center gap-2">
+            {selectedList && (
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Plus className="h-4 w-4" />
+                    Novo Contato
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Novo Contato</DialogTitle>
+                    <DialogDescription>
+                      Adicione um contato manualmente à lista selecionada.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="contactName">Nome</Label>
+                      <Input
+                        id="contactName"
+                        placeholder="Nome do contato"
+                        value={newContactName}
+                        onChange={(e) => setNewContactName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="contactPhone">Telefone (com DDD e país)</Label>
+                      <Input
+                        id="contactPhone"
+                        placeholder="5511999999999"
+                        value={newContactPhone}
+                        onChange={(e) => setNewContactPhone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsCreateOpen(false)}
+                      disabled={isCreating}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="gradient"
+                      onClick={handleCreateContact}
+                      disabled={isCreating}
+                    >
+                      {isCreating && (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      )}
+                      Salvar
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+            <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+              <DialogTrigger asChild>
+                <Button variant="gradient">
+                  <Upload className="h-4 w-4" />
+                  Importar Lista
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Importar Lista de Contatos</DialogTitle>
+                  <DialogDescription>
+                    Faça upload de uma planilha com os contatos (CSV ou Excel)
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Lista de destino</Label>
+                    <Select
+                      value={
+                        importTargetMode === "new"
+                          ? "new"
+                          : importTargetListId || "new"
+                      }
+                      onValueChange={(value) => {
+                        if (value === "new") {
+                          setImportTargetMode("new");
+                          setImportTargetListId(null);
+                        } else {
+                          setImportTargetMode("existing");
+                          setImportTargetListId(value);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione ou crie uma lista" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="new">Criar nova lista</SelectItem>
+                        {lists.map((list) => (
+                          <SelectItem key={list.id} value={list.id}>
+                            {list.name} ({list.contactCount} contatos)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {importTargetMode === "new" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="listName">Nome da Lista</Label>
+                      <Input
+                        id="listName"
+                        placeholder="Nome da lista"
+                        value={newListName}
+                        onChange={(e) => setNewListName(e.target.value)}
+                      />
+                    </div>
+                  )}
               <div className="space-y-2">
                 <Label>Arquivo</Label>
                 <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary">
