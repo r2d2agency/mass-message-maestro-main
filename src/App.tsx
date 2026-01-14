@@ -12,7 +12,7 @@ import Mensagens from "./pages/Mensagens";
 import Campanhas from "./pages/Campanhas";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
-// import Usuarios from "./pages/Usuarios";
+import Usuarios from "./pages/Usuarios";
 
 const queryClient = new QueryClient();
 
