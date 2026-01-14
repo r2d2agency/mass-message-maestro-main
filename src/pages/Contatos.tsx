@@ -671,11 +671,11 @@ const Contatos = () => {
                         Arraste seu arquivo ou clique para selecionar
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Suporta CSV
+                        Suporta CSV, XLS e XLSX
                       </p>
                       <Input
                         type="file"
-                        accept=".csv"
+                        accept=".csv,.xls,.xlsx"
                         onChange={handleFileChange}
                         className="mt-4"
                       />
