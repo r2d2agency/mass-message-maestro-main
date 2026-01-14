@@ -51,10 +51,10 @@ testConnection().then(async connected => {
 });
 
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: '*', // Allow ALL origins
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  credentials: false
 }));
 
 app.options('*', cors());
@@ -81,4 +81,5 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Blaster API v1.0.3 running on port ${PORT}`);
+  console.log(`🔓 CORS configured with origin: * and credentials: false`);
 });
