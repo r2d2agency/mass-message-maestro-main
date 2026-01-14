@@ -48,6 +48,7 @@ const Mensagens = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -173,15 +174,21 @@ const Mensagens = () => {
     );
     return counts;
   };
-
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const items = Array.from(messageItems);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    setMessageItems(items);
+  const handleDragStart = (index: number) => {
+    setDraggingIndex(index);
+  };
+  const handleDragEnter = (index: number) => {
+    if (draggingIndex === null || draggingIndex === index) return;
+    setMessageItems((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(draggingIndex, 1);
+      updated.splice(index, 0, moved);
+      return updated;
+    });
+    setDraggingIndex(index);
+  };
+  const handleDragEnd = () => {
+    setDraggingIndex(null);
   };
 
   return (
@@ -310,38 +317,29 @@ const Mensagens = () => {
                   {/* Message Items List */}
                   <div className="space-y-3">
                     <Label>Blocos da Mensagem</Label>
-                    <DragDropContext onDragEnd={handleDragEnd}>
-                      <Droppable droppableId="message-items">
-                        {(provided) => (
-                          <div
-                            {...provided.droppableProps}
-                            ref={provided.innerRef}
-                            className="space-y-3"
-                          >
-                            {messageItems.map((item, index) => (
-                              <Draggable key={item.id} draggableId={item.id} index={index}>
-                                {(provided) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                  >
-                                    <MessageItemEditor
-                                      item={item}
-                                      index={index}
-                                      onUpdate={updateMessageItem}
-                                      onDelete={deleteMessageItem}
-                                      insertVariable={insertVariable}
-                                      dragHandleProps={provided.dragHandleProps}
-                                    />
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
-                            {provided.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
-                    </DragDropContext>
+                    <div className="space-y-3">
+                      {messageItems.map((item, index) => (
+                        <div
+                          key={item.id}
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragEnter={(event) => {
+                            event.preventDefault();
+                            handleDragEnter(index);
+                          }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <MessageItemEditor
+                            item={item}
+                            index={index}
+                            onUpdate={updateMessageItem}
+                            onDelete={deleteMessageItem}
+                            insertVariable={insertVariable}
+                          />
+                        </div>
+                      ))}
+                    </div>
 
                     <AddMessageButton onAdd={addMessageItem} />
                   </div>
