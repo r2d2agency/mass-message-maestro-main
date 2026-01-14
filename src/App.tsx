@@ -12,7 +12,7 @@ import Mensagens from "./pages/Mensagens";
 import Campanhas from "./pages/Campanhas";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
-import Usuarios from "./pages/Usuarios";
+// import Usuarios from "./pages/Usuarios";
 
 const queryClient = new QueryClient();
 
@@ -30,7 +30,7 @@ const App = () => (
             <Route path="/mensagens" element={<ProtectedRoute><Mensagens /></ProtectedRoute>} />
             <Route path="/campanhas" element={<ProtectedRoute><Campanhas /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-            <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
+            {/* <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} /> */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

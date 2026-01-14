@@ -63,7 +63,7 @@ export function Sidebar() {
               </Link>
             );
           })}
-          {user?.role === "admin" && (
+          {/* {user?.role === "admin" && (
             <Link
               to="/usuarios"
               className={cn(
@@ -81,7 +81,7 @@ export function Sidebar() {
               />
               Usuários
             </Link>
-          )}
+          )} */}
         </nav>
 
         <div className="border-t border-border p-4">
