@@ -13,6 +13,7 @@ import Campanhas from "./pages/Campanhas";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 import Usuarios from "./pages/Usuarios";
+import Conexoes from "./pages/Conexoes";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/contatos" element={<ProtectedRoute><Contatos /></ProtectedRoute>} />
             <Route path="/mensagens" element={<ProtectedRoute><Mensagens /></ProtectedRoute>} />
             <Route path="/campanhas" element={<ProtectedRoute><Campanhas /></ProtectedRoute>} />
+            <Route path="/conexoes" element={<ProtectedRoute><Conexoes /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

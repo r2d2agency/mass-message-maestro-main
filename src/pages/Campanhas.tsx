@@ -27,6 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { api } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
 import {
   Send,
   Plus,
@@ -147,6 +148,7 @@ const mapStatus = (status: ApiCampaign["status"]): UiCampaignStatus => {
 };
 
 const Campanhas = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("list");
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [campaignName, setCampaignName] = useState("");
@@ -607,6 +609,19 @@ const Campanhas = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {connections.length === 0 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Nenhuma conexão Evolution configurada para este usuário.{" "}
+                        <button
+                          type="button"
+                          className="underline underline-offset-2 text-primary"
+                          onClick={() => navigate("/conexoes")}
+                        >
+                          Clique aqui para configurar
+                        </button>
+                        .
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">

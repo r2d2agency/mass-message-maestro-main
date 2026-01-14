@@ -77,6 +77,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root route for default health checks
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'Blaster API' });
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Blaster API v1.0.3 running on port ${PORT}`);
 });

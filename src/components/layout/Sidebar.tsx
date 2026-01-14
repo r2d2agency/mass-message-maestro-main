@@ -17,6 +17,7 @@ const navigation = [
   { name: "Contatos", href: "/contatos", icon: Users },
   { name: "Mensagens", href: "/mensagens", icon: MessageSquare },
   { name: "Campanhas", href: "/campanhas", icon: Send },
+  { name: "Conexões", href: "/conexoes", icon: Zap },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 
