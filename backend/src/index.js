@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+// import cors from 'cors'; // Disabled in favor of manual headers
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
@@ -50,14 +50,19 @@ testConnection().then(async connected => {
   }
 });
 
-app.use(cors({
-  origin: '*', // Allow ALL origins
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
-}));
 
-app.options('*', cors());
+// Manual CORS middleware - bypasses cors package issues
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -88,5 +93,5 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Blaster API v1.0.3 running on port ${PORT}`);
-  console.log(`🔓 CORS configured with origin: * and credentials: false`);
+  console.log(`🔓 Manual CORS headers configured (Allow-Origin: *)`);
 });
