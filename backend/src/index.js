@@ -50,24 +50,11 @@ testConnection().then(async connected => {
   }
 });
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://blaster.r2d2.agency'
-];
-
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
+  origin: true, // Allow all origins
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  credentials: true
 }));
 
 app.options('*', cors());
