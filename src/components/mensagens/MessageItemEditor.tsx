@@ -1,3 +1,4 @@
+import { useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { uploadFile } from "@/lib/api";
 
 export type MessageItemType = "text" | "image" | "video" | "audio";
 
@@ -70,6 +72,99 @@ export function MessageItemEditor({
   const config = typeConfig[item.type];
   const Icon = config.icon;
 
+  const [isUploading, setIsUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const handleUploadClick = () => {
+    if (!isUploading) {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const response = await uploadFile<{ url: string }>("/api/messages/upload", file);
+      if (response.url) {
+        onUpdate(item.id, { mediaUrl: response.url });
+      }
+    } catch (error) {
+      console.error("Erro ao fazer upload da mídia", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      const recorder = mediaRecorderRef.current;
+      const stream = mediaStreamRef.current;
+
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        audioChunksRef.current = [];
+
+        const file = new File([blob], "gravacao.webm", { type: "audio/webm" });
+
+        setIsUploading(true);
+        try {
+          const response = await uploadFile<{ url: string }>("/api/messages/upload", file);
+          if (response.url) {
+            onUpdate(item.id, { mediaUrl: response.url });
+          }
+        } catch (error) {
+          console.error("Erro ao enviar áudio gravado", error);
+        } finally {
+          setIsUploading(false);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Não foi possível acessar o microfone", error);
+    }
+  };
+
   return (
     <div className="group relative rounded-lg border border-border bg-card p-4 transition-all hover:border-primary/50">
       {/* Header */}
@@ -121,17 +216,58 @@ export function MessageItemEditor({
           {/* Media Upload */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">URL da mídia</Label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Input
                 placeholder={`URL do ${config.label.toLowerCase()}`}
                 value={item.mediaUrl || ""}
                 onChange={(e) => onUpdate(item.id, { mediaUrl: e.target.value })}
               />
-              <Button variant="outline" size="icon" className="shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={
+                  item.type === "image"
+                    ? "image/*"
+                    : item.type === "video"
+                    ? "video/*"
+                    : item.type === "audio"
+                    ? "audio/*"
+                    : undefined
+                }
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={handleUploadClick}
+                disabled={isUploading}
+              >
                 <Upload className="h-4 w-4" />
               </Button>
             </div>
           </div>
+
+          {item.type === "audio" && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Gravar áudio</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={isRecording ? "destructive" : "outline"}
+                  type="button"
+                  onClick={handleToggleRecording}
+                  disabled={isUploading}
+                >
+                  <Mic className="h-4 w-4 mr-1" />
+                  {isRecording ? "Parar" : "Gravar"}
+                </Button>
+                {item.mediaUrl && (
+                  <audio controls src={item.mediaUrl} className="h-10" />
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Preview for images */}
           {item.type === "image" && item.mediaUrl && (

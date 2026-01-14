@@ -1,9 +1,34 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 router.use(authenticate);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'media');
+
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext).replace(/\s+/g, '-').toLowerCase();
+    const unique = Date.now();
+    cb(null, `${base}-${unique}${ext}`);
+  },
+});
+
+const upload = multer({ storage });
 
 // List user message templates
 router.get('/', async (req, res) => {
@@ -16,6 +41,27 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('List messages error:', error);
     res.status(500).json({ error: 'Erro ao listar mensagens' });
+  }
+});
+
+router.post('/upload', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Arquivo não enviado' });
+    }
+
+    const protocolHeader = req.headers['x-forwarded-proto'];
+    const protocol = Array.isArray(protocolHeader)
+      ? protocolHeader[0]
+      : protocolHeader || req.protocol;
+
+    const host = req.get('host');
+    const url = `${protocol}://${host}/uploads/media/${req.file.filename}`;
+
+    res.json({ url });
+  } catch (error) {
+    console.error('Upload media error:', error);
+    res.status(500).json({ error: 'Erro ao enviar arquivo' });
   }
 });
 

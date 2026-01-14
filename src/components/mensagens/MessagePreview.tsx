@@ -24,7 +24,6 @@ export function MessagePreview({ items, previewName }: MessagePreviewProps) {
       {items.map((item) => (
         <div key={item.id} className="flex justify-end">
           <div className="max-w-[85%] rounded-lg bg-[#dcf8c6] px-3 py-2 shadow-sm">
-            {/* Media content */}
             {item.type === "image" && (
               <div className="mb-2 rounded overflow-hidden">
                 {item.mediaUrl ? (
@@ -45,22 +44,41 @@ export function MessagePreview({ items, previewName }: MessagePreviewProps) {
             )}
 
             {item.type === "video" && (
-              <div className="mb-2 flex items-center justify-center h-24 bg-gray-200 rounded">
-                <Video className="h-8 w-8 text-gray-400" />
+              <div className="mb-2 rounded overflow-hidden bg-black">
+                {item.mediaUrl ? (
+                  <video
+                    src={item.mediaUrl}
+                    controls
+                    className="max-w-full max-h-48"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-24 bg-gray-200">
+                    <Video className="h-8 w-8 text-gray-400" />
+                  </div>
+                )}
               </div>
             )}
 
             {item.type === "audio" && (
-              <div className="mb-2 flex items-center gap-2 bg-gray-200 rounded-full px-4 py-2">
-                <Mic className="h-4 w-4 text-gray-500" />
-                <div className="flex-1 h-1 bg-gray-300 rounded-full">
-                  <div className="w-1/3 h-full bg-gray-500 rounded-full" />
+              <div className="mb-2 flex items-center gap-3 rounded-2xl bg-white px-3 py-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white">
+                  <Mic className="h-4 w-4" />
                 </div>
+                {item.mediaUrl ? (
+                  <audio
+                    controls
+                    src={item.mediaUrl}
+                    className="flex-1 h-8"
+                  />
+                ) : (
+                  <div className="flex-1 h-1 bg-gray-300 rounded-full">
+                    <div className="w-1/3 h-full bg-gray-500 rounded-full" />
+                  </div>
+                )}
                 <span className="text-xs text-gray-500">0:00</span>
               </div>
             )}
 
-            {/* Text/Caption */}
             {(item.type === "text" ? item.content : item.caption) && (
               <p className="text-sm text-gray-800 whitespace-pre-wrap">
                 {replaceVariables(item.type === "text" ? item.content : item.caption || "")}

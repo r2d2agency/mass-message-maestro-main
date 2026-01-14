@@ -17,12 +17,19 @@ const buildMessagesFromTemplate = (items, contactName) => {
     if (item.type === 'text') {
       const text = replaceVariables(item.content || '');
       if (text.trim()) {
-        messages.push({ type: 'text', text });
+        messages.push({ kind: 'text', text });
       }
     } else {
+      const mediaUrl = item.mediaUrl || item.mediaURL || item.url || '';
       const caption = replaceVariables(item.caption || '');
-      if (caption.trim()) {
-        messages.push({ type: 'text', text: caption });
+      if (mediaUrl) {
+        messages.push({
+          kind: item.type,
+          mediaUrl,
+          caption: caption || '',
+        });
+      } else if (caption.trim()) {
+        messages.push({ kind: 'text', text: caption });
       }
     }
   }
@@ -42,9 +49,8 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
   const instanceName = connection.instance_name;
 
   for (const msg of messages) {
-    const response = await fetch(
-      `${apiUrl}/message/sendText/${instanceName}`,
-      {
+    if (msg.kind === 'text') {
+      const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -54,14 +60,43 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
           number: phone,
           text: msg.text,
         }),
-      }
-    );
+      });
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(
-        `Evolution API error (${response.status}): ${body || 'failed to send message'}`
-      );
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(
+          `Evolution API error (${response.status}): ${body || 'failed to send text'}`
+        );
+      }
+    } else if (
+      msg.kind === 'image' ||
+      msg.kind === 'video' ||
+      msg.kind === 'audio'
+    ) {
+      if (!msg.mediaUrl) {
+        continue;
+      }
+
+      const response = await fetch(`${apiUrl}/message/sendMedia/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: JSON.stringify({
+          number: phone,
+          mediatype: msg.kind,
+          caption: msg.caption || undefined,
+          media: msg.mediaUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(
+          `Evolution API sendMedia error (${response.status}): ${body || 'failed to send media'}`
+        );
+      }
     }
   }
 

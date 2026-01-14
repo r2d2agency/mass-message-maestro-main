@@ -1,5 +1,6 @@
 import express from 'express';
-// import cors from 'cors'; // Disabled in favor of manual headers
+import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
@@ -14,6 +15,11 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadsPath = path.join(__dirname, '..', 'uploads');
 
 const SUPER_ADMIN_EMAIL = 'tnicodemos@gmail.com';
 
@@ -66,6 +72,8 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+app.use('/uploads', express.static(uploadsPath));
 
 // Request Logger
 app.use((req, res, next) => {

@@ -1,4 +1,4 @@
-const API_URL = 'https://blaster-blasterback.isyhhh.easypanel.host';
+export const API_URL = 'https://blaster-blasterback.isyhhh.easypanel.host';
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -24,6 +24,40 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro na requisição');
+  }
+
+  return data;
+};
+
+export const uploadFile = async <T = { url: string }>(
+  endpoint: string,
+  file: File,
+  options: { auth?: boolean } = {}
+): Promise<T> => {
+  const { auth = true } = options;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers: Record<string, string> = {};
+
+  if (auth) {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: formData,
   });
 
   const data = await response.json();
