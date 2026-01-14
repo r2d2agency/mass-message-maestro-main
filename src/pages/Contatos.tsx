@@ -594,14 +594,14 @@ const Contatos = () => {
                   Importar Lista
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
                 <DialogHeader>
                   <DialogTitle>Importar Lista de Contatos</DialogTitle>
                   <DialogDescription>
                     Faça upload de uma arquivo CSV com os contatos
                   </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 py-4 overflow-y-auto pr-2 flex-1">
                   <div className="space-y-2">
                     <Label>Lista de destino</Label>
                     <Select
@@ -735,7 +735,7 @@ const Contatos = () => {
                     </div>
                   )}
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 pt-3 border-t border-border mt-2">
                   <Button
                     variant="outline"
                     onClick={() => setIsUploadOpen(false)}
