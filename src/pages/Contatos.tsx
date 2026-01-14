@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 
 interface ContactList {
@@ -174,7 +175,9 @@ const Contatos = () => {
     setUploadFile(file);
     setImportResult(null);
 
-    file.text().then((text) => {
+    const extension = file.name.toLowerCase().split(".").pop();
+
+    const processText = (text: string) => {
       const lines = text
         .split(/\r?\n/)
         .map((line) => line.trim())
@@ -232,7 +235,21 @@ const Contatos = () => {
 
       setColumnPreviews(previews);
       setColumnMappings(initialMappings);
-    });
+    };
+
+    if (extension === "xls" || extension === "xlsx") {
+      file.arrayBuffer().then((buffer) => {
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const csv = XLSX.utils.sheet_to_csv(worksheet);
+        processText(csv);
+      });
+    } else {
+      file.text().then((text) => {
+        processText(text);
+      });
+    }
   };
 
   const handleMappingChange = (index: number, field: MappedField) => {
@@ -258,17 +275,6 @@ const Contatos = () => {
       if (!uploadFile) {
         toast({
           title: "Selecione um arquivo para importação",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const extension = uploadFile.name.toLowerCase().split(".").pop();
-
-      if (extension !== "csv") {
-        toast({
-          title: "Formato de arquivo não suportado",
-          description: "No momento, importe apenas arquivos CSV.",
           variant: "destructive",
         });
         return;
@@ -307,7 +313,20 @@ const Contatos = () => {
       const nameIndex = nameColumns[0];
       const phoneIndex = phoneColumns[0];
 
-      const text = await uploadFile.text();
+      const extension = uploadFile.name.toLowerCase().split(".").pop();
+
+      let text = "";
+
+      if (extension === "xls" || extension === "xlsx") {
+        const buffer = await uploadFile.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        text = XLSX.utils.sheet_to_csv(worksheet);
+      } else {
+        text = await uploadFile.text();
+      }
+
       const lines = text
         .split(/\r?\n/)
         .map((line) => line.trim())
