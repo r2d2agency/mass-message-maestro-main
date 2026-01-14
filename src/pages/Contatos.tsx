@@ -400,8 +400,8 @@ const Contatos = () => {
         targetListId = createdList.id;
       }
 
-      // Process in chunks of 50 to avoid timeout/payload issues
-      const CHUNK_SIZE = 50;
+      // Process in chunks of 10 to avoid timeout/payload issues
+      const CHUNK_SIZE = 10;
       const totalContacts = contactsToImport.length;
       
       const accumulatedResult: ImportResult = {
