@@ -1,6 +1,6 @@
 {
   "name": "blaster-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "start": "npm run db:setup && node src/index.js",

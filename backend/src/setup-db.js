@@ -28,6 +28,16 @@ const setupDb = async () => {
     await pool.query(schemaSql);
     
     console.log('Schema migration completed successfully.');
+
+    // Manual migration fix to ensure end_at exists (double check)
+    try {
+      console.log('Verifying schema updates...');
+      await pool.query('ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS end_at TIMESTAMP WITH TIME ZONE;');
+      console.log('Verified: end_at column exists.');
+    } catch (err) {
+      console.warn('Manual check for end_at column failed:', err.message);
+    }
+
   } catch (error) {
     console.error('Error running schema migration:', error);
     process.exit(1);
