@@ -522,7 +522,6 @@ const Contatos = () => {
   return (
     <MainLayout>
       <div className="space-y-8">
-        {/* Header */}
         <div className="flex items-center justify-between animate-slide-up">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Contatos</h1>
@@ -599,7 +598,7 @@ const Contatos = () => {
                 <DialogHeader>
                   <DialogTitle>Importar Lista de Contatos</DialogTitle>
                   <DialogDescription>
-                    Faça upload de uma planilha com os contatos (CSV ou Excel)
+                    Faça upload de uma arquivo CSV com os contatos
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -645,116 +644,117 @@ const Contatos = () => {
                       />
                     </div>
                   )}
-              <div className="space-y-2">
-                <Label>Arquivo</Label>
-                <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary">
-                  <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                      Arraste seu arquivo ou clique para selecionar
-                    </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Suporta CSV, XLS, XLSX
-                  </p>
-                  <Input
-                    type="file"
-                    accept=".csv,.xls,.xlsx"
-                    onChange={handleFileChange}
-                    className="mt-4"
-                  />
-                </div>
-              </div>
-              <div className="rounded-lg bg-accent/50 p-3">
-                <p className="text-xs text-muted-foreground">
-                  <strong>Formato esperado:</strong> A planilha deve ter as colunas
-                  "nome" e "telefone" (com código do país).
-                </p>
-              </div>
-              {columnPreviews.length > 0 && (
-                <div className="space-y-3 rounded-lg border border-border p-3">
-                  <p className="text-xs font-medium text-foreground">
-                    Mapeie as colunas da planilha para os campos internos do sistema.
-                    É obrigatório informar qual coluna é Nome e qual é Telefone.
-                  </p>
                   <div className="space-y-2">
-                    {columnPreviews.map((col) => (
-                      <div
-                        key={col.index}
-                        className="flex items-start gap-4 rounded-md bg-accent/40 p-2"
-                      >
-                        <div className="flex-1 text-xs">
-                          <p className="font-semibold text-foreground">
-                            Coluna {col.index + 1}: {col.header}
-                          </p>
-                          <div className="mt-1 text-muted-foreground">
-                            {col.samples.map((sample, idx) => (
-                              <p key={idx}>
-                                {sample || "(vazio)"}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="w-40 space-y-1">
-                          <Label className="text-xs">Campo no sistema</Label>
-                          <Select
-                            value={columnMappings[col.index] ?? "none"}
-                            onValueChange={(value) =>
-                              handleMappingChange(
-                                col.index,
-                                value as MappedField
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Selecionar campo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Ignorar</SelectItem>
-                              <SelectItem value="name">Nome</SelectItem>
-                              <SelectItem value="phone">Telefone</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    ))}
+                    <Label>Arquivo</Label>
+                    <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary">
+                      <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Arraste seu arquivo ou clique para selecionar
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Suporta CSV
+                      </p>
+                      <Input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileChange}
+                        className="mt-4"
+                      />
+                    </div>
                   </div>
+                  <div className="rounded-lg bg-accent/50 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Formato esperado:</strong> A planilha deve ter as
+                      colunas "nome" e "telefone" (com código do país).
+                    </p>
+                  </div>
+                  {columnPreviews.length > 0 && (
+                    <div className="space-y-3 rounded-lg border border-border p-3">
+                      <p className="text-xs font-medium text-foreground">
+                        Mapeie as colunas da planilha para os campos internos do
+                        sistema. É obrigatório informar qual coluna é Nome e qual é
+                        Telefone.
+                      </p>
+                      <div className="space-y-2">
+                        {columnPreviews.map((col) => (
+                          <div
+                            key={col.index}
+                            className="flex items-start gap-4 rounded-md bg-accent/40 p-2"
+                          >
+                            <div className="flex-1 text-xs">
+                              <p className="font-semibold text-foreground">
+                                Coluna {col.index + 1}: {col.header}
+                              </p>
+                              <div className="mt-1 text-muted-foreground">
+                                {col.samples.map((sample, idx) => (
+                                  <p key={idx}>{sample || "(vazio)"}</p>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="w-40 space-y-1">
+                              <Label className="text-xs">Campo no sistema</Label>
+                              <Select
+                                value={columnMappings[col.index] ?? "none"}
+                                onValueChange={(value) =>
+                                  handleMappingChange(
+                                    col.index,
+                                    value as MappedField
+                                  )
+                                }
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue placeholder="Selecionar campo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Ignorar</SelectItem>
+                                  <SelectItem value="name">Nome</SelectItem>
+                                  <SelectItem value="phone">Telefone</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {importResult && (
+                    <div className="space-y-1 rounded-lg bg-muted p-3 text-xs text-foreground">
+                      <p>
+                        <strong>Total no arquivo:</strong> {importResult.total}
+                      </p>
+                      <p>
+                        <strong>Total com WhatsApp:</strong>{" "}
+                        {importResult.totalWhatsapp}
+                      </p>
+                      <p>
+                        <strong>Importados:</strong> {importResult.imported}
+                      </p>
+                      <p>
+                        <strong>Total com erros:</strong> {importResult.totalErrors}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-              {importResult && (
-                <div className="rounded-lg bg-muted p-3 text-xs text-foreground space-y-1">
-                  <p>
-                    <strong>Total no arquivo:</strong> {importResult.total}
-                  </p>
-                  <p>
-                    <strong>Total com WhatsApp:</strong>{" "}
-                    {importResult.totalWhatsapp}
-                  </p>
-                  <p>
-                    <strong>Importados:</strong> {importResult.imported}
-                  </p>
-                  <p>
-                    <strong>Total com erros:</strong> {importResult.totalErrors}
-                  </p>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsUploadOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="gradient"
+                    onClick={handleImport}
+                    disabled={isImporting}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {isImporting ? "Importando..." : "Importar"}
+                  </Button>
                 </div>
-              )}
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsUploadOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  variant="gradient"
-                  onClick={handleImport}
-                  disabled={isImporting}
-                >
-                  <Upload className="h-4 w-4" />
-                  {isImporting ? "Importando..." : "Importar"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-
-        {/* Lists Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card
             className={`cursor-pointer transition-all duration-200 hover:shadow-elevated animate-fade-in ${
@@ -774,7 +774,6 @@ const Contatos = () => {
               </div>
             </CardContent>
           </Card>
-
           {lists.map((list, index) => (
             <Card
               key={list.id}
@@ -801,8 +800,6 @@ const Contatos = () => {
             </Card>
           ))}
         </div>
-
-        {/* Contacts Table */}
         <Card className="animate-fade-in shadow-card">
           <CardHeader>
             <div className="flex items-center justify-between">
