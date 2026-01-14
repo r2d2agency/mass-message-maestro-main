@@ -239,8 +239,7 @@ const Configuracoes = () => {
                   <Input
                     id="maxMessagesDay"
                     type="number"
-                    defaultValue="500"
-                    placeholder="Ex: 500"
+                    placeholder="Informe o limite diário"
                   />
                   <p className="text-xs text-muted-foreground">
                     Máximo de mensagens por dia
@@ -251,8 +250,7 @@ const Configuracoes = () => {
                   <Input
                     id="minPause"
                     type="number"
-                    defaultValue="30"
-                    placeholder="Ex: 30"
+                    placeholder="Informe a pausa mínima"
                   />
                   <p className="text-xs text-muted-foreground">
                     Mínimo entre mensagens
@@ -263,8 +261,7 @@ const Configuracoes = () => {
                   <Input
                     id="maxPause"
                     type="number"
-                    defaultValue="120"
-                    placeholder="Ex: 120"
+                    placeholder="Informe a pausa máxima"
                   />
                   <p className="text-xs text-muted-foreground">
                     Máximo entre mensagens

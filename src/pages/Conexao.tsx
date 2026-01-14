@@ -89,7 +89,7 @@ const Conexao = () => {
                   onChange={(e) => setApiUrl(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Ex: https://api.seudominio.com.br
+                  Informe a URL completa da sua API
                 </p>
               </div>
               <div className="space-y-2">

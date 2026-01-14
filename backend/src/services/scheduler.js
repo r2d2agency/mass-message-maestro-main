@@ -28,38 +28,37 @@ export const scheduleCampaign = async (campaignId) => {
     // If scheduled_at is in the past, start now
     if (nextTime < new Date()) nextTime = new Date();
 
-    // Default to user config, but enforce safer minimums if not provided
-    // User asked for min 90s, max 5 min (300s)
-    const minDelay = campaign.min_delay || 90; 
-    const maxDelay = campaign.max_delay || 300; 
-    
-    // Safety check: ensure minDelay is at least 10s to avoid spam blocks
-    // (User requested 90s, so we are good, but good to have a floor)
-    const safeMinDelay = Math.max(minDelay, 10);
-    const safeMaxDelay = Math.max(maxDelay, safeMinDelay + 10);
+    const minDelay = campaign.min_delay || 90;
+    const maxDelay = campaign.max_delay || 300;
 
-    const batchSize = 30 + Math.floor(Math.random() * 20); // Random batch size between 30-50
+    const safeMinDelay = Math.max(minDelay, 10);
+    const safeMaxDelay = Math.max(maxDelay, safeMinDelay + 5);
+
+    const batchSize = 20;
     let messagesInBatch = 0;
 
-    console.log(`Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${safeMinDelay}-${safeMaxDelay}s`);
+    console.log(
+      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${safeMinDelay}-${safeMaxDelay}s and 10min pause every ${batchSize} messages`
+    );
 
-    // Prepare insert values
     for (const contact of contacts) {
-      // Add random delay for this message
-      const delay = Math.floor(Math.random() * (safeMaxDelay - safeMinDelay + 1) + safeMinDelay);
+      const delay =
+        Math.floor(
+          Math.random() * (safeMaxDelay - safeMinDelay + 1)
+        ) + safeMinDelay;
+
       nextTime = new Date(nextTime.getTime() + delay * 1000);
 
-      // "Human" pause logic: every ~40 messages, pause for 10 minutes
-      messagesInBatch++;
+      messagesInBatch += 1;
       if (messagesInBatch >= batchSize) {
-        // Add 10 minutes (600 seconds) + random variance
-        const pause = 600 + Math.floor(Math.random() * 60); 
-        nextTime = new Date(nextTime.getTime() + pause * 1000);
-        messagesInBatch = 0; // Reset batch
-        console.log(`Adding pause of ${pause}s at ${nextTime.toISOString()}`);
+        const pauseSeconds = 600;
+        nextTime = new Date(nextTime.getTime() + pauseSeconds * 1000);
+        messagesInBatch = 0;
+        console.log(
+          `Adding 10min pause at ${nextTime.toISOString()} after ${batchSize} messages`
+        );
       }
 
-      // Insert message record
       await query(
         `INSERT INTO campaign_messages 
          (campaign_id, contact_id, phone, status, scheduled_for)

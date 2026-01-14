@@ -1,9 +1,72 @@
+import { useEffect, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { RecentCampaigns } from "@/components/dashboard/RecentCampaigns";
 import { Users, MessageSquare, Send, CheckCircle2 } from "lucide-react";
+import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+
+interface ApiContact {
+  id: string;
+}
+
+interface ApiCampaign {
+  id: string;
+  status: "pending" | "running" | "paused" | "completed" | "cancelled";
+  sent_count: string;
+  failed_count: string;
+}
 
 const Index = () => {
+  const [totalContacts, setTotalContacts] = useState(0);
+  const [sentMessages, setSentMessages] = useState(0);
+  const [activeCampaigns, setActiveCampaigns] = useState(0);
+  const [deliveryRate, setDeliveryRate] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setIsLoading(true);
+        const [contacts, campaigns] = await Promise.all([
+          api<ApiContact[]>("/api/contacts"),
+          api<ApiCampaign[]>("/api/campaigns"),
+        ]);
+
+        setTotalContacts(contacts.length);
+
+        const active = campaigns.filter((c) => c.status === "running").length;
+        setActiveCampaigns(active);
+
+        const sent = campaigns.reduce(
+          (sum, c) => sum + (Number(c.sent_count) || 0),
+          0
+        );
+        const failed = campaigns.reduce(
+          (sum, c) => sum + (Number(c.failed_count) || 0),
+          0
+        );
+        setSentMessages(sent);
+
+        const total = sent + failed;
+        const rate = total > 0 ? (sent / total) * 100 : 0;
+        setDeliveryRate(rate);
+      } catch (error) {
+        toast({
+          title: "Erro ao carregar estatísticas",
+          description:
+            error instanceof Error ? error.message : "Tente novamente mais tarde",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadStats();
+  }, [toast]);
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -15,34 +78,42 @@ const Index = () => {
           </p>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Total de Contatos"
-            value="2.458"
+            value={
+              isLoading
+                ? "Carregando..."
+                : totalContacts.toLocaleString("pt-BR")
+            }
             description="Em todas as listas"
             icon={<Users className="h-6 w-6 text-primary" />}
-            trend={{ value: 12, isPositive: true }}
           />
           <StatsCard
             title="Mensagens Enviadas"
-            value="15.234"
-            description="Este mês"
+            value={
+              isLoading
+                ? "Carregando..."
+                : sentMessages.toLocaleString("pt-BR")
+            }
+            description="Somatório das campanhas"
             icon={<Send className="h-6 w-6 text-primary" />}
-            trend={{ value: 8, isPositive: true }}
           />
           <StatsCard
             title="Campanhas Ativas"
-            value="3"
+            value={isLoading ? "Carregando..." : activeCampaigns}
             description="Em execução agora"
             icon={<MessageSquare className="h-6 w-6 text-primary" />}
           />
           <StatsCard
             title="Taxa de Entrega"
-            value="98.5%"
+            value={
+              isLoading
+                ? "Carregando..."
+                : `${deliveryRate.toFixed(1)}%`
+            }
             description="Média geral"
             icon={<CheckCircle2 className="h-6 w-6 text-primary" />}
-            trend={{ value: 2, isPositive: true }}
           />
         </div>
 

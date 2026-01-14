@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -8,6 +8,8 @@ import {
   Settings,
   Zap,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -19,6 +21,13 @@ const navigation = [
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-card border-r border-border shadow-card">
@@ -34,7 +43,6 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 space-y-1 px-3 py-4">
           {navigation.map((item) => {
             const isActive = location.pathname === item.href;
@@ -56,14 +64,18 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Footer */}
         <div className="border-t border-border p-4">
-          <div className="rounded-lg bg-accent/50 p-3">
-            <p className="text-xs font-medium text-accent-foreground">
-              Versão 1.0.0
-            </p>
-            <p className="text-xs text-muted-foreground">Plataforma de disparo em massa</p>
-          </div>
+          <Button
+            variant="outline"
+            className="mb-3 flex w-full items-center justify-between text-sm font-medium"
+            onClick={handleLogout}
+          >
+            <span>Sair</span>
+            <Zap className="h-4 w-4" />
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Versão 1.0.0 • Blaster
+          </p>
         </div>
       </div>
     </aside>

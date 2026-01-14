@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ import {
 import { MessageItemEditor, MessageItem, MessageItemType } from "@/components/mensagens/MessageItemEditor";
 import { AddMessageButton } from "@/components/mensagens/AddMessageButton";
 import { MessagePreview } from "@/components/mensagens/MessagePreview";
+import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface SavedMessage {
   id: string;
@@ -28,33 +30,12 @@ interface SavedMessage {
   createdAt: string;
 }
 
-const mockMessages: SavedMessage[] = [
-  {
-    id: "1",
-    name: "Boas-vindas",
-    items: [
-      { id: "1a", type: "text", content: "Olá {{nome}}! Seja bem-vindo(a) à nossa loja! 🎉" },
-    ],
-    createdAt: "10/01/2026",
-  },
-  {
-    id: "2",
-    name: "Promoção",
-    items: [
-      { id: "2a", type: "image", content: "", mediaUrl: "", caption: "{{nome}}, confira nossa promoção! 🔥" },
-      { id: "2b", type: "text", content: "Use o cupom DESCONTO10 para 10% off!" },
-    ],
-    createdAt: "08/01/2026",
-  },
-  {
-    id: "3",
-    name: "Lembrete",
-    items: [
-      { id: "3a", type: "text", content: "Oi {{nome}}! Não esqueça do nosso compromisso amanhã. Até lá! 👋" },
-    ],
-    createdAt: "05/01/2026",
-  },
-];
+interface ApiMessage {
+  id: string;
+  name: string;
+  items: MessageItem[];
+  created_at: string;
+}
 
 const Mensagens = () => {
   const [activeTab, setActiveTab] = useState("list");
@@ -62,7 +43,38 @@ const Mensagens = () => {
   const [messageItems, setMessageItems] = useState<MessageItem[]>([
     { id: crypto.randomUUID(), type: "text", content: "" },
   ]);
-  const [previewName, setPreviewName] = useState("João");
+  const [previewName, setPreviewName] = useState("Cliente");
+  const [savedMessages, setSavedMessages] = useState<SavedMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        setIsLoading(true);
+        const data = await api<ApiMessage[]>("/api/messages");
+        setSavedMessages(
+          data.map((m) => ({
+            id: m.id,
+            name: m.name,
+            items: m.items,
+            createdAt: new Date(m.created_at).toLocaleDateString("pt-BR"),
+          }))
+        );
+      } catch (error) {
+        toast({
+          title: "Erro ao carregar mensagens",
+          description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadMessages();
+  }, [toast]);
 
   const addMessageItem = (type: MessageItemType) => {
     const newItem: MessageItem = {
@@ -96,6 +108,59 @@ const Mensagens = () => {
         return { ...item, caption: (item.caption || "") + `{{${variable}}}` };
       })
     );
+  };
+
+  const handleSaveMessage = async () => {
+    if (!messageName.trim()) {
+      toast({
+        title: "Informe o nome da mensagem",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (messageItems.length === 0) {
+      toast({
+        title: "Adicione pelo menos um bloco",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const created = await api<ApiMessage>("/api/messages", {
+        method: "POST",
+        body: {
+          name: messageName.trim(),
+          items: messageItems,
+        },
+      });
+
+      const mapped: SavedMessage = {
+        id: created.id,
+        name: created.name,
+        items: created.items,
+        createdAt: new Date(created.created_at).toLocaleDateString("pt-BR"),
+      };
+
+      setSavedMessages((prev) => [mapped, ...prev]);
+      setMessageName("");
+      setMessageItems([{ id: crypto.randomUUID(), type: "text", content: "" }]);
+      setActiveTab("list");
+
+      toast({
+        title: "Mensagem salva com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao salvar mensagem",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getItemsCount = (items: MessageItem[]) => {
@@ -134,7 +199,17 @@ const Mensagens = () => {
 
           <TabsContent value="list" className="space-y-4 mt-6">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {mockMessages.map((message, index) => {
+              {isLoading && (
+                <p className="text-sm text-muted-foreground">
+                  Carregando mensagens...
+                </p>
+              )}
+              {!isLoading && savedMessages.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma mensagem cadastrada ainda.
+                </p>
+              )}
+              {savedMessages.map((message, index) => {
                 const counts = getItemsCount(message.items);
                 return (
                   <Card
@@ -216,7 +291,7 @@ const Mensagens = () => {
                     <Label htmlFor="messageName">Nome da Mensagem</Label>
                     <Input
                       id="messageName"
-                      placeholder="Ex: Boas-vindas"
+                      placeholder="Nome da mensagem"
                       value={messageName}
                       onChange={(e) => setMessageName(e.target.value)}
                     />
@@ -241,9 +316,14 @@ const Mensagens = () => {
                     <AddMessageButton onAdd={addMessageItem} />
                   </div>
 
-                  <Button variant="gradient" className="w-full">
+                  <Button
+                    variant="gradient"
+                    className="w-full"
+                    onClick={handleSaveMessage}
+                    disabled={isSaving}
+                  >
                     <FileText className="h-4 w-4" />
-                    Salvar Mensagem
+                    {isSaving ? "Salvando..." : "Salvar Mensagem"}
                   </Button>
                 </CardContent>
               </Card>

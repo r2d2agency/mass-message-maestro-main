@@ -5,6 +5,24 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 router.use(authenticate);
 
+// List all contacts for current user
+router.get('/', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT c.*, cl.name as list_name
+       FROM contacts c
+       JOIN contact_lists cl ON c.list_id = cl.id
+       WHERE cl.user_id = $1
+       ORDER BY c.created_at DESC`,
+      [req.userId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('List contacts error:', error);
+    res.status(500).json({ error: 'Erro ao listar contatos' });
+  }
+});
+
 // List user contact lists
 router.get('/lists', async (req, res) => {
   try {
@@ -125,7 +143,7 @@ router.post('/lists/:listId/contacts', async (req, res) => {
   }
 });
 
-// Bulk import contacts
+// Bulk import contacts with Evolution validation
 router.post('/lists/:listId/import', async (req, res) => {
   try {
     const { listId } = req.params;
@@ -145,16 +163,149 @@ router.post('/lists/:listId/import', async (req, res) => {
       return res.status(404).json({ error: 'Lista não encontrada' });
     }
 
-    // Insert contacts in batch
-    const values = contacts.map((c, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(', ');
-    const params = [listId, ...contacts.flatMap(c => [c.name, c.phone])];
+    const rawContacts = contacts.map(c => ({
+      name: (c.name || '').toString().trim() || 'Sem nome',
+      phone: (c.phone || '').toString().trim(),
+    }));
 
-    await query(
-      `INSERT INTO contacts (list_id, name, phone) VALUES ${values}`,
-      params
+    // Normalize phones (digits only) and discard clearly invalid formats
+    const normalized = rawContacts.map(c => {
+      const digits = c.phone.replace(/\D/g, '');
+      return { ...c, normalizedPhone: digits };
+    });
+
+    const MIN_PHONE_LENGTH = 8;
+
+    const candidates = normalized.filter(
+      c => c.normalizedPhone && c.normalizedPhone.length >= MIN_PHONE_LENGTH
     );
 
-    res.json({ success: true, imported: contacts.length });
+    const total = rawContacts.length;
+    let totalErrors = total - candidates.length;
+
+    if (candidates.length === 0) {
+      return res.status(400).json({
+        error: 'Nenhum número válido encontrado para importação',
+        total,
+        imported: 0,
+        totalWhatsapp: 0,
+        totalErrors: total,
+      });
+    }
+
+    // Use user's latest Evolution connection to validate numbers
+    const connectionResult = await query(
+      `SELECT api_url, api_key, instance_name
+       FROM connections
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [req.userId]
+    );
+
+    if (connectionResult.rows.length === 0) {
+      return res.status(400).json({
+        error: 'Configure uma conexão Evolution antes de importar contatos',
+      });
+    }
+
+    const { api_url, api_key, instance_name } = connectionResult.rows[0];
+
+    // Call Evolution API to check which numbers are WhatsApp
+    const numbersToCheck = candidates.map(c => c.normalizedPhone);
+
+    let whatsappNumbers = new Set();
+
+    try {
+      const evoResponse = await fetch(
+        `${api_url}/chat/whatsappNumbers/${instance_name}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: api_key,
+          },
+          body: JSON.stringify({ numbers: numbersToCheck }),
+        }
+      );
+
+      if (!evoResponse.ok) {
+        console.error('Evolution whatsappNumbers error status:', evoResponse.status);
+        return res.status(502).json({
+          error: 'Não foi possível validar os números com a Evolution API',
+        });
+      }
+
+      const evoData = await evoResponse.json();
+
+      const resultsArray = Array.isArray(evoData)
+        ? evoData
+        : Array.isArray(evoData.numbers)
+        ? evoData.numbers
+        : Array.isArray(evoData.result)
+        ? evoData.result
+        : Array.isArray(evoData.response)
+        ? evoData.response
+        : [];
+
+      for (const item of resultsArray) {
+        const num = (item.number || item.phone || '').toString().replace(/\D/g, '');
+        const exists =
+          item.exists === true ||
+          item.isWhatsapp === true ||
+          item.is_whatsapp === true ||
+          item.isWhatsApp === true;
+
+        if (num && exists) {
+          whatsappNumbers.add(num);
+        }
+      }
+    } catch (err) {
+      console.error('Evolution whatsappNumbers request failed:', err);
+      return res.status(502).json({
+        error: 'Não foi possível validar os números com a Evolution API',
+      });
+    }
+
+    const validContacts = [];
+    let totalWhatsapp = 0;
+
+    for (const c of candidates) {
+      const isWhatsapp = whatsappNumbers.has(c.normalizedPhone);
+
+      if (isWhatsapp) {
+        totalWhatsapp += 1;
+        validContacts.push({
+          name: c.name,
+          phone: c.normalizedPhone,
+        });
+      } else {
+        totalErrors += 1;
+      }
+    }
+
+    const imported = validContacts.length;
+
+    if (imported > 0) {
+      const values = validContacts
+        .map((c, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`)
+        .join(', ');
+
+      const params = [listId, ...validContacts.flatMap(c => [c.name, c.phone])];
+
+      await query(
+        `INSERT INTO contacts (list_id, name, phone) VALUES ${values}`,
+        params
+      );
+    }
+
+    res.json({
+      success: true,
+      total,
+      imported,
+      totalWhatsapp,
+      totalErrors,
+    });
   } catch (error) {
     console.error('Import contacts error:', error);
     res.status(500).json({ error: 'Erro ao importar contatos' });

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
+import { scheduleCampaign } from '../services/scheduler.js';
 
 const router = Router();
 router.use(authenticate);
@@ -156,6 +157,40 @@ router.get('/:id/stats', async (req, res) => {
   } catch (error) {
     console.error('Get campaign stats error:', error);
     res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+  }
+});
+
+router.get('/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const campaign = await query(
+      `SELECT id FROM campaigns 
+       WHERE id = $1 
+         AND user_id IN (
+           SELECT id FROM users WHERE id = $2 OR manager_id = $2
+         )`,
+      [id, req.userId]
+    );
+
+    if (campaign.rows.length === 0) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    const result = await query(
+      `SELECT cm.id, cm.campaign_id, cm.contact_id, cm.phone, cm.status, cm.sent_at, cm.created_at,
+              c.name as contact_name
+       FROM campaign_messages cm
+       LEFT JOIN contacts c ON cm.contact_id = c.id
+       WHERE cm.campaign_id = $1
+       ORDER BY cm.created_at DESC`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('List campaign messages error:', error);
+    res.status(500).json({ error: 'Erro ao listar mensagens da campanha' });
   }
 });
 

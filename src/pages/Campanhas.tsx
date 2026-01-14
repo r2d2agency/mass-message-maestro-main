@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { api } from "@/lib/api";
 import {
   Send,
   Plus,
@@ -43,19 +44,19 @@ import {
   Shuffle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+
+type UiCampaignStatus = "scheduled" | "running" | "completed" | "paused";
 
 interface Campaign {
   id: string;
   name: string;
-  status: "scheduled" | "running" | "completed" | "paused";
-  listName: string;
-  messageName: string;
+  status: UiCampaignStatus;
+  listName?: string;
+  messageName?: string;
   totalContacts: number;
   sentMessages: number;
-  startDate: string;
-  endDate: string;
-  startTime: string;
-  endTime: string;
+  scheduledAt?: string;
 }
 
 interface SendLog {
@@ -67,55 +68,67 @@ interface SendLog {
   sentAt: string;
 }
 
-const mockCampaigns: Campaign[] = [
-  {
-    id: "1",
-    name: "Promoção Black Friday",
-    status: "completed",
-    listName: "Clientes VIP",
-    messageName: "Promoção",
-    totalContacts: 250,
-    sentMessages: 250,
-    startDate: "10/01/2026",
-    endDate: "11/01/2026",
-    startTime: "08:00",
-    endTime: "18:00",
-  },
-  {
-    id: "2",
-    name: "Lançamento Novo Produto",
-    status: "running",
-    listName: "Leads Janeiro",
-    messageName: "Boas-vindas",
-    totalContacts: 180,
-    sentMessages: 117,
-    startDate: "12/01/2026",
-    endDate: "13/01/2026",
-    startTime: "08:00",
-    endTime: "18:00",
-  },
-  {
-    id: "3",
-    name: "Reativação de Clientes",
-    status: "scheduled",
-    listName: "Reativação",
-    messageName: "Lembrete",
-    totalContacts: 420,
-    sentMessages: 0,
-    startDate: "15/01/2026",
-    endDate: "16/01/2026",
-    startTime: "09:00",
-    endTime: "17:00",
-  },
-];
+interface ApiCampaign {
+  id: string;
+  name: string;
+  status: "pending" | "running" | "paused" | "completed" | "cancelled";
+  list_name?: string;
+  message_name?: string;
+  scheduled_at?: string;
+  sent_count: number;
+  failed_count: number;
+  created_at: string;
+}
 
-const mockLogs: SendLog[] = [
-  { id: "1", campaignId: "2", contactName: "João Silva", phone: "+55 11 99999-1111", status: "sent", sentAt: "12/01 10:23" },
-  { id: "2", campaignId: "2", contactName: "Maria Santos", phone: "+55 11 99999-2222", status: "sent", sentAt: "12/01 10:35" },
-  { id: "3", campaignId: "2", contactName: "Pedro Oliveira", phone: "+55 11 99999-3333", status: "failed", sentAt: "12/01 10:47" },
-  { id: "4", campaignId: "2", contactName: "Ana Costa", phone: "+55 11 99999-4444", status: "sent", sentAt: "12/01 10:59" },
-  { id: "5", campaignId: "2", contactName: "Carlos Lima", phone: "+55 11 99999-5555", status: "pending", sentAt: "-" },
-];
+interface ApiSendLog {
+  id: string;
+  campaign_id: string;
+  contact_id: string | null;
+  contact_name: string | null;
+  phone: string;
+  status: "sent" | "failed" | "pending" | "processing";
+  sent_at: string | null;
+  created_at: string;
+}
+
+interface ApiContactList {
+  id: string;
+  name: string;
+  contact_count: number;
+}
+
+interface ApiMessageTemplate {
+  id: string;
+  name: string;
+}
+
+interface ApiConnection {
+  id: string;
+  name: string;
+  status: string;
+}
+
+interface CampaignStats {
+  total: number;
+  sent: number;
+  failed: number;
+  pending: number;
+}
+
+interface CampaignStatsResponse {
+  campaign: {
+    id: string;
+    status: string;
+    sent_count: number;
+    failed_count: number;
+  };
+  stats: {
+    total: string;
+    sent: string;
+    failed: string;
+    pending: string;
+  };
+}
 
 const statusConfig = {
   scheduled: { icon: CalendarIcon, label: "Agendada", color: "text-muted-foreground", bgColor: "bg-muted" },
@@ -124,15 +137,305 @@ const statusConfig = {
   paused: { icon: Pause, label: "Pausada", color: "text-destructive", bgColor: "bg-destructive/10" },
 };
 
+const mapStatus = (status: ApiCampaign["status"]): UiCampaignStatus => {
+  if (status === "pending") return "scheduled";
+  if (status === "cancelled") return "paused";
+  if (status === "running" || status === "completed" || status === "paused") {
+    return status;
+  }
+  return "scheduled";
+};
+
 const Campanhas = () => {
   const [activeTab, setActiveTab] = useState("list");
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [campaignName, setCampaignName] = useState("");
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string>("");
+  const [selectedListId, setSelectedListId] = useState<string>("");
+  const [selectedMessageId, setSelectedMessageId] = useState<string>("");
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
   const [pauseInterval, setPauseInterval] = useState("10");
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
+  const [connections, setConnections] = useState<ApiConnection[]>([]);
+  const [lists, setLists] = useState<ApiContactList[]>([]);
+  const [messages, setMessages] = useState<ApiMessageTemplate[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logs, setLogs] = useState<SendLog[]>([]);
+  const [monitorStats, setMonitorStats] = useState<CampaignStats>({
+    total: 0,
+    sent: 0,
+    failed: 0,
+    pending: 0,
+  });
+  const [isLoadingMonitor, setIsLoadingMonitor] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setIsLoadingCampaigns(true);
+
+        const [campaignsData, connectionsData, listsData, messagesData] =
+          await Promise.all([
+            api<ApiCampaign[]>("/api/campaigns"),
+            api<ApiConnection[]>("/api/connections"),
+            api<ApiContactList[]>("/api/contacts/lists"),
+            api<ApiMessageTemplate[]>("/api/messages"),
+          ]);
+
+        const mappedCampaigns = campaignsData.map((campaign) => {
+          const sent = Number(campaign.sent_count) || 0;
+          const failed = Number(campaign.failed_count) || 0;
+          const total = sent + failed;
+          const scheduledDate = campaign.scheduled_at || campaign.created_at;
+          const scheduledAt = scheduledDate
+            ? new Date(scheduledDate).toLocaleString("pt-BR")
+            : undefined;
+
+          return {
+            id: campaign.id,
+            name: campaign.name,
+            status: mapStatus(campaign.status),
+            listName: campaign.list_name,
+            messageName: campaign.message_name,
+            totalContacts: total,
+            sentMessages: sent,
+            scheduledAt,
+          };
+        });
+
+        setCampaigns(mappedCampaigns);
+        setConnections(connectionsData);
+        setLists(
+          listsData.map((list) => ({
+            id: list.id,
+            name: list.name,
+            contact_count: Number(list.contact_count) || 0,
+          }))
+        );
+        setMessages(
+          messagesData.map((message) => ({
+            id: message.id,
+            name: message.name,
+          }))
+        );
+      } catch (error) {
+        toast({
+          title: "Erro ao carregar dados",
+          description:
+            error instanceof Error ? error.message : "Tente novamente mais tarde",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingCampaigns(false);
+      }
+    };
+
+    loadInitialData();
+  }, [toast]);
+
+  const handleCreateCampaign = async () => {
+    if (!campaignName.trim()) {
+      toast({
+        title: "Informe o nome da campanha",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedConnectionId || !selectedListId || !selectedMessageId) {
+      toast({
+        title: "Selecione conexão, lista e mensagem",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!startDate || !endDate) {
+      toast({
+        title: "Informe data de início e fim",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedList = lists.find((list) => list.id === selectedListId);
+    const contactCount = selectedList?.contact_count ?? 0;
+
+    if (contactCount <= 0) {
+      toast({
+        title: "A lista selecionada não possui contatos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const [startHours, startMinutes] = startTime
+      .split(":")
+      .map((v) => parseInt(v, 10));
+    const [endHours, endMinutes] = endTime
+      .split(":")
+      .map((v) => parseInt(v, 10));
+
+    const startDateTime = new Date(startDate);
+    startDateTime.setHours(startHours || 0, startMinutes || 0, 0, 0);
+
+    const endDateTime = new Date(endDate);
+    endDateTime.setHours(endHours || 0, endMinutes || 0, 0, 0);
+
+    if (endDateTime <= startDateTime) {
+      toast({
+        title: "Período inválido",
+        description: "A data/hora de fim deve ser maior que a de início.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const totalSeconds =
+      (endDateTime.getTime() - startDateTime.getTime()) / 1000;
+
+    const pauseCount =
+      contactCount > 1 ? Math.floor((contactCount - 1) / 20) : 0;
+    const pauseTotalSeconds = pauseCount * 600;
+    const effectiveSeconds = totalSeconds - pauseTotalSeconds;
+
+    if (effectiveSeconds <= contactCount * 10 || effectiveSeconds <= 0) {
+      toast({
+        title: "Período muito curto",
+        description:
+          "Amplie o intervalo entre início e fim ou use uma lista com menos contatos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const avgInterval = effectiveSeconds / contactCount;
+    const min_delay = Math.max(Math.floor(avgInterval * 0.6), 10);
+    const max_delay = Math.max(Math.floor(avgInterval * 1.4), min_delay + 5);
+
+    let scheduled_at: string | null = null;
+    scheduled_at = startDateTime.toISOString();
+
+    try {
+      setIsSubmitting(true);
+
+      await api<ApiCampaign>("/api/campaigns", {
+        method: "POST",
+        body: {
+          name: campaignName.trim(),
+          connection_id: selectedConnectionId,
+          list_id: selectedListId,
+          message_id: selectedMessageId,
+          scheduled_at,
+          min_delay,
+          max_delay,
+        },
+      });
+
+      toast({
+        title: "Campanha criada com sucesso",
+      });
+
+      setCampaignName("");
+      setSelectedConnectionId("");
+      setSelectedListId("");
+      setSelectedMessageId("");
+      setStartDate(undefined);
+      setEndDate(undefined);
+      setStartTime("08:00");
+      setEndTime("18:00");
+      setPauseInterval("10");
+
+      const campaignsData = await api<ApiCampaign[]>("/api/campaigns");
+      const mappedCampaigns = campaignsData.map((campaign) => {
+        const sent = Number(campaign.sent_count) || 0;
+        const failed = Number(campaign.failed_count) || 0;
+        const total = sent + failed;
+        const scheduledDate = campaign.scheduled_at || campaign.created_at;
+        const scheduledAt = scheduledDate
+          ? new Date(scheduledDate).toLocaleString("pt-BR")
+          : undefined;
+
+        return {
+          id: campaign.id,
+          name: campaign.name,
+          status: mapStatus(campaign.status),
+          listName: campaign.list_name,
+          messageName: campaign.message_name,
+          totalContacts: total,
+          sentMessages: sent,
+          scheduledAt,
+        };
+      });
+
+      setCampaigns(mappedCampaigns);
+      setActiveTab("list");
+    } catch (error) {
+      toast({
+        title: "Erro ao criar campanha",
+        description:
+          error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const loadMonitor = async (campaignId: string) => {
+    try {
+      setIsLoadingMonitor(true);
+
+      const statsResponse = await api<CampaignStatsResponse>(
+        `/api/campaigns/${campaignId}/stats`
+      );
+      const messagesResponse = await api<ApiSendLog[]>(
+        `/api/campaigns/${campaignId}/messages`
+      );
+
+      const stats = statsResponse.stats;
+
+      setMonitorStats({
+        total: Number(stats.total) || 0,
+        sent: Number(stats.sent) || 0,
+        failed: Number(stats.failed) || 0,
+        pending: Number(stats.pending) || 0,
+      });
+
+      setLogs(
+        messagesResponse.map((log) => ({
+          id: log.id,
+          campaignId: log.campaign_id,
+          contactName: log.contact_name || log.phone,
+          phone: log.phone,
+          status:
+            log.status === "sent" || log.status === "failed" ? log.status : "pending",
+          sentAt: log.sent_at
+            ? new Date(log.sent_at).toLocaleString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "-",
+        }))
+      );
+    } catch (error) {
+      toast({
+        title: "Erro ao carregar monitoramento",
+        description:
+          error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMonitor(false);
+    }
+  };
 
   return (
     <MainLayout>
@@ -161,10 +464,20 @@ const Campanhas = () => {
           </TabsList>
 
           <TabsContent value="list" className="space-y-4 mt-6">
-            {mockCampaigns.map((campaign, index) => {
+            {isLoadingCampaigns && campaigns.length === 0 && (
+              <Card className="animate-fade-in shadow-card">
+                <CardContent className="p-6">
+                  <p className="text-sm text-muted-foreground">Carregando campanhas...</p>
+                </CardContent>
+              </Card>
+            )}
+            {campaigns.map((campaign, index) => {
               const config = statusConfig[campaign.status];
               const StatusIcon = config.icon;
-              const progress = (campaign.sentMessages / campaign.totalContacts) * 100;
+              const progress =
+                campaign.totalContacts > 0
+                  ? (campaign.sentMessages / campaign.totalContacts) * 100
+                  : 0;
 
               return (
                 <Card
@@ -187,20 +500,18 @@ const Campanhas = () => {
                         <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Users className="h-4 w-4" />
-                            {campaign.listName}
+                            {campaign.listName || "Lista não informada"}
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="h-4 w-4" />
-                            {campaign.messageName}
+                            {campaign.messageName || "Mensagem não informada"}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <CalendarIcon className="h-4 w-4" />
-                            {campaign.startDate} - {campaign.endDate}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {campaign.startTime} - {campaign.endTime}
-                          </span>
+                          {campaign.scheduledAt && (
+                            <span className="flex items-center gap-1">
+                              <CalendarIcon className="h-4 w-4" />
+                              {campaign.scheduledAt}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -218,6 +529,7 @@ const Campanhas = () => {
                             onClick={() => {
                               setSelectedCampaign(campaign.id);
                               setActiveTab("monitor");
+                              loadMonitor(campaign.id);
                             }}
                           >
                             <Eye className="h-4 w-4" />
@@ -266,36 +578,80 @@ const Campanhas = () => {
                     <Label htmlFor="campaignName">Nome da Campanha</Label>
                     <Input
                       id="campaignName"
-                      placeholder="Ex: Promoção de Verão"
+                      placeholder="Nome da campanha"
                       value={campaignName}
                       onChange={(e) => setCampaignName(e.target.value)}
                     />
                   </div>
 
                   <div className="space-y-2">
+                    <Label>Conexão</Label>
+                    <Select
+                      value={selectedConnectionId}
+                      onValueChange={setSelectedConnectionId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma conexão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {connections.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            Nenhuma conexão disponível
+                          </SelectItem>
+                        )}
+                        {connections.map((connection) => (
+                          <SelectItem key={connection.id} value={connection.id}>
+                            {connection.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label>Lista de Contatos</Label>
-                    <Select>
+                    <Select
+                      value={selectedListId}
+                      onValueChange={setSelectedListId}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione uma lista" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">Clientes VIP (250)</SelectItem>
-                        <SelectItem value="2">Leads Janeiro (180)</SelectItem>
-                        <SelectItem value="3">Reativação (420)</SelectItem>
+                        {lists.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            Nenhuma lista disponível
+                          </SelectItem>
+                        )}
+                        {lists.map((list) => (
+                          <SelectItem key={list.id} value={list.id}>
+                            {list.name} ({list.contact_count})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Mensagem</Label>
-                    <Select>
+                    <Select
+                      value={selectedMessageId}
+                      onValueChange={setSelectedMessageId}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione uma mensagem" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">Boas-vindas</SelectItem>
-                        <SelectItem value="2">Promoção</SelectItem>
-                        <SelectItem value="3">Lembrete</SelectItem>
+                        {messages.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            Nenhuma mensagem disponível
+                          </SelectItem>
+                        )}
+                        {messages.map((message) => (
+                          <SelectItem key={message.id} value={message.id}>
+                            {message.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -420,9 +776,14 @@ const Campanhas = () => {
                     </div>
                   </div>
 
-                  <Button variant="gradient" className="w-full">
+                  <Button
+                    variant="gradient"
+                    className="w-full"
+                    onClick={handleCreateCampaign}
+                    disabled={isSubmitting}
+                  >
                     <Send className="h-4 w-4" />
-                    Agendar Campanha
+                    {isSubmitting ? "Agendando..." : "Agendar Campanha"}
                   </Button>
                 </CardContent>
               </Card>
@@ -442,15 +803,15 @@ const Campanhas = () => {
                   <div className="flex gap-2">
                     <Badge variant="secondary" className="bg-success/10 text-success">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Enviadas: 3
+                      Enviadas: {monitorStats.sent}
                     </Badge>
                     <Badge variant="secondary" className="bg-destructive/10 text-destructive">
                       <AlertCircle className="h-3 w-3 mr-1" />
-                      Falhas: 1
+                      Falhas: {monitorStats.failed}
                     </Badge>
                     <Badge variant="secondary">
                       <Clock className="h-3 w-3 mr-1" />
-                      Pendentes: 1
+                      Pendentes: {monitorStats.pending}
                     </Badge>
                   </div>
                 </div>
@@ -466,33 +827,44 @@ const Campanhas = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="font-medium">{log.contactName}</TableCell>
-                        <TableCell>{log.phone}</TableCell>
-                        <TableCell>
-                          {log.status === "sent" && (
-                            <Badge className="bg-success/10 text-success border-0">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Enviada
-                            </Badge>
-                          )}
-                          {log.status === "failed" && (
-                            <Badge className="bg-destructive/10 text-destructive border-0">
-                              <AlertCircle className="h-3 w-3 mr-1" />
-                              Falha
-                            </Badge>
-                          )}
-                          {log.status === "pending" && (
-                            <Badge variant="secondary">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Pendente
-                            </Badge>
-                          )}
+                    {isLoadingMonitor && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-center text-sm text-muted-foreground"
+                        >
+                          Carregando envios da campanha...
                         </TableCell>
-                        <TableCell>{log.sentAt}</TableCell>
                       </TableRow>
-                    ))}
+                    )}
+                    {!isLoadingMonitor &&
+                      logs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="font-medium">{log.contactName}</TableCell>
+                          <TableCell>{log.phone}</TableCell>
+                          <TableCell>
+                            {log.status === "sent" && (
+                              <Badge className="bg-success/10 text-success border-0">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Enviada
+                              </Badge>
+                            )}
+                            {log.status === "failed" && (
+                              <Badge className="bg-destructive/10 text-destructive border-0">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                Falha
+                              </Badge>
+                            )}
+                            {log.status === "pending" && (
+                              <Badge variant="secondary">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Pendente
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>{log.sentAt}</TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </CardContent>

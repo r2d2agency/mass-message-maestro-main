@@ -9,7 +9,8 @@ router.use(authenticate, requireAdmin);
 router.get('/', async (req, res) => {
   try {
     const result = await query(
-      `SELECT u.id, u.email, u.name, u.status, u.created_at, u.updated_at,
+      `SELECT u.id, u.email, u.name, u.status, u.plan_name, u.monthly_message_limit,
+              u.created_at, u.updated_at,
               COALESCE((
                 SELECT role FROM user_roles ur
                 WHERE ur.user_id = u.id
@@ -22,6 +23,45 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao listar usuários' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const { email, password, name, role = 'user', plan_name, monthly_message_limit } = req.body;
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Email, nome e senha são obrigatórios' });
+    }
+
+    if (!['admin', 'manager', 'user'].includes(role)) {
+      return res.status(400).json({ error: 'Papel inválido' });
+    }
+
+    const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já cadastrado' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const created = await query(
+      `INSERT INTO users (email, password_hash, name, plan_name, monthly_message_limit)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, email, name, status, plan_name, monthly_message_limit, created_at, updated_at`,
+      [email, passwordHash, name, plan_name || null, monthly_message_limit || null]
+    );
+
+    const user = created.rows[0];
+
+    await query(
+      'INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT (user_id, role) DO NOTHING',
+      [user.id, role]
+    );
+
+    res.status(201).json({ ...user, role });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao criar usuário' });
   }
 });
 
@@ -86,6 +126,31 @@ router.patch('/:id/password', async (req, res) => {
   }
 });
 
+router.patch('/:id/plan', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { plan_name, monthly_message_limit } = req.body;
+
+    const result = await query(
+      `UPDATE users 
+       SET plan_name = COALESCE($1, plan_name),
+           monthly_message_limit = COALESCE($2, monthly_message_limit),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, email, name, status, plan_name, monthly_message_limit`,
+      [plan_name ?? null, monthly_message_limit ?? null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar plano do usuário' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -110,4 +175,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 export default router;
-
