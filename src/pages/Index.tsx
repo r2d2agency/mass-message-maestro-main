@@ -1,6 +1,5 @@
 import { MainLayout } from "@/components/layout/MainLayout";
 import { StatsCard } from "@/components/dashboard/StatsCard";
-import { ConnectionStatus } from "@/components/dashboard/ConnectionStatus";
 import { RecentCampaigns } from "@/components/dashboard/RecentCampaigns";
 import { Users, MessageSquare, Send, CheckCircle2 } from "lucide-react";
 
@@ -15,13 +14,6 @@ const Index = () => {
             Visão geral do seu sistema de disparo de mensagens
           </p>
         </div>
-
-        {/* Connection Status */}
-        <ConnectionStatus
-          status="connected"
-          instanceName="minha-instancia"
-          phoneNumber="+55 11 99999-9999"
-        />
 
         {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">

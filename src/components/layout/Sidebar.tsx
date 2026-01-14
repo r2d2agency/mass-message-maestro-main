@@ -2,7 +2,6 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
-  Plug,
   Users,
   MessageSquare,
   Send,
@@ -12,7 +11,6 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Conexão", href: "/conexao", icon: Plug },
   { name: "Contatos", href: "/contatos", icon: Users },
   { name: "Mensagens", href: "/mensagens", icon: MessageSquare },
   { name: "Campanhas", href: "/campanhas", icon: Send },
@@ -64,9 +62,7 @@ export function Sidebar() {
             <p className="text-xs font-medium text-accent-foreground">
               Versão 1.0.0
             </p>
-            <p className="text-xs text-muted-foreground">
-              Evolution API conectada
-            </p>
+            <p className="text-xs text-muted-foreground">Plataforma de disparo em massa</p>
           </div>
         </div>
       </div>
