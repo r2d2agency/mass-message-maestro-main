@@ -6,8 +6,11 @@ import { pool } from './db.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const MIGRATION_SCRIPT_VERSION = 'setup-db-v2-idx-fix-2026-01-14';
+
 const setupDb = async () => {
   try {
+    console.log('Running DB setup script version:', MIGRATION_SCRIPT_VERSION);
     const schemaPath = path.join(__dirname, '../schema.sql');
     
     if (!fs.existsSync(schemaPath)) {
@@ -21,13 +24,17 @@ const setupDb = async () => {
     // A simple query to test connection before running the big script
     await pool.query('SELECT 1');
     console.log('Connected. Running schema migration...');
-    
-    // Split commands by semicolon might be safer if the driver doesn't support multiple statements,
-    // but pg driver usually supports multiple statements in one query call.
-    // However, for better error reporting, executing the whole file is the standard first try.
-    await pool.query(schemaSql);
-    
-    console.log('Schema migration completed successfully.');
+
+    try {
+      await pool.query(schemaSql);
+      console.log('Schema migration completed successfully.');
+    } catch (error) {
+      if (error.code === '42P07' && String(error.message).includes('idx_message_templates_user_id')) {
+        console.warn('Index idx_message_templates_user_id already exists. Continuing migration...');
+      } else {
+        throw error;
+      }
+    }
 
     // Manual migration fix to ensure end_at exists (double check)
     try {
@@ -49,8 +56,12 @@ const setupDb = async () => {
     }
 
   } catch (error) {
-    console.error('Error running schema migration:', error);
-    process.exit(1);
+    if (error.code === '42P07' && String(error.message).includes('idx_message_templates_user_id')) {
+      console.warn('Ignoring duplicate index error for idx_message_templates_user_id at top level. Continuing.');
+    } else {
+      console.error('Error running schema migration:', error);
+      process.exit(1);
+    }
   } finally {
     await pool.end();
   }

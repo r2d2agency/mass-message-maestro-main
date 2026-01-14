@@ -121,13 +121,17 @@ CREATE TABLE IF NOT EXISTS campaign_messages (
 );
 
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_users_manager_id ON users(manager_id);
-CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id);
-CREATE INDEX IF NOT EXISTS idx_contact_lists_user_id ON contact_lists(user_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_list_id ON contacts(list_id);
-CREATE INDEX idx_message_templates_user_id ON message_templates(user_id);
-CREATE INDEX idx_campaigns_user_id ON campaigns(user_id);
-CREATE INDEX idx_campaign_messages_campaign_id ON campaign_messages(campaign_id);
-CREATE INDEX idx_campaign_messages_status ON campaign_messages(status);
+DO $$
+BEGIN
+    BEGIN CREATE INDEX idx_users_manager_id ON users(manager_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_connections_user_id ON connections(user_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_contact_lists_user_id ON contact_lists(user_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_contacts_list_id ON contacts(list_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_message_templates_user_id ON message_templates(user_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_campaigns_user_id ON campaigns(user_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_campaign_messages_campaign_id ON campaign_messages(campaign_id); EXCEPTION WHEN duplicate_table THEN NULL; END;
+    BEGIN CREATE INDEX idx_campaign_messages_status ON campaign_messages(status); EXCEPTION WHEN duplicate_table THEN NULL; END;
+END
+$$;
 
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS end_at TIMESTAMP WITH TIME ZONE;
