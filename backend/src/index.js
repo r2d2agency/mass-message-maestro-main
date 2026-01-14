@@ -78,5 +78,5 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Blaster API v1.0.1 running on port ${PORT}`);
+  console.log(`🚀 Blaster API v1.0.2 running on port ${PORT}`);
 });

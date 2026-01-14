@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- User plan/limits
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS plan_name VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS monthly_message_limit INTEGER;
+    ADD COLUMN IF NOT EXISTS monthly_message_limit INTEGER,
+    ADD COLUMN IF NOT EXISTS manager_id UUID REFERENCES users(id);
 
 -- User roles (for future admin/manager functionality)
 DO $$
