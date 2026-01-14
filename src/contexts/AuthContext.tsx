@@ -6,6 +6,7 @@ interface User {
   id: string;
   email: string;
   name: string;
+  role: "admin" | "manager" | "user";
 }
 
 interface AuthContextType {
@@ -13,7 +14,6 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -47,13 +47,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: 'Login realizado com sucesso!' });
   };
 
-  const register = async (email: string, password: string, name: string) => {
-    const { user, token } = await authApi.register(email, password, name);
-    setAuthToken(token);
-    setUser(user);
-    toast({ title: 'Conta criada com sucesso!' });
-  };
-
   const logout = () => {
     clearAuthToken();
     setUser(null);
@@ -67,7 +60,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading,
         isAuthenticated: !!user,
         login,
-        register,
         logout,
       }}
     >

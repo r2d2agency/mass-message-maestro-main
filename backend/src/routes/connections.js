@@ -5,11 +5,14 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 router.use(authenticate);
 
-// List user connections
 router.get('/', async (req, res) => {
   try {
     const result = await query(
-      'SELECT * FROM connections WHERE user_id = $1 ORDER BY created_at DESC',
+      `SELECT * FROM connections 
+       WHERE user_id IN (
+         SELECT id FROM users WHERE id = $1 OR manager_id = $1
+       )
+       ORDER BY created_at DESC`,
       [req.userId]
     );
     res.json(result.rows);

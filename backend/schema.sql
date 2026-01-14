@@ -7,16 +7,31 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    manager_id UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- User roles (for future admin functionality)
-DO $$ BEGIN
-    CREATE TYPE app_role AS ENUM ('admin', 'user');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+-- User roles (for future admin/manager functionality)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+        CREATE TYPE app_role AS ENUM ('admin', 'manager', 'user');
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    BEGIN
+        ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'manager';
+    EXCEPTION
+        WHEN duplicate_object THEN
+            NULL;
+    END;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,6 +114,7 @@ CREATE TABLE IF NOT EXISTS campaign_messages (
 );
 
 -- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_users_manager_id ON users(manager_id);
 CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id);
 CREATE INDEX IF NOT EXISTS idx_contact_lists_user_id ON contact_lists(user_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_list_id ON contacts(list_id);

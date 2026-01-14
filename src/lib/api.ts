@@ -35,22 +35,17 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
   return data;
 };
 
-// Auth helpers
+type AuthUser = { id: string; email: string; name: string; role: "admin" | "manager" | "user" };
+
 export const authApi = {
   login: (email: string, password: string) =>
-    api<{ user: { id: string; email: string; name: string }; token: string }>(
+    api<{ user: AuthUser; token: string }>(
       '/api/auth/login',
       { method: 'POST', body: { email, password }, auth: false }
     ),
 
-  register: (email: string, password: string, name: string) =>
-    api<{ user: { id: string; email: string; name: string }; token: string }>(
-      '/api/auth/register',
-      { method: 'POST', body: { email, password, name }, auth: false }
-    ),
-
   getMe: () =>
-    api<{ user: { id: string; email: string; name: string } }>('/api/auth/me'),
+    api<{ user: AuthUser }>('/api/auth/me'),
 };
 
 export const setAuthToken = (token: string) => {

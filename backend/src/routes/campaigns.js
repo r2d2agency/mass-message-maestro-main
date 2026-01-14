@@ -5,7 +5,6 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 router.use(authenticate);
 
-// List user campaigns
 router.get('/', async (req, res) => {
   try {
     const result = await query(
@@ -17,7 +16,9 @@ router.get('/', async (req, res) => {
        LEFT JOIN contact_lists cl ON c.list_id = cl.id
        LEFT JOIN message_templates mt ON c.message_id = mt.id
        LEFT JOIN connections conn ON c.connection_id = conn.id
-       WHERE c.user_id = $1
+       WHERE c.user_id IN (
+         SELECT id FROM users WHERE id = $1 OR manager_id = $1
+       )
        ORDER BY c.created_at DESC`,
       [req.userId]
     );
@@ -126,7 +127,11 @@ router.get('/:id/stats', async (req, res) => {
     const { id } = req.params;
 
     const campaign = await query(
-      'SELECT * FROM campaigns WHERE id = $1 AND user_id = $2',
+      `SELECT * FROM campaigns 
+       WHERE id = $1 
+         AND user_id IN (
+           SELECT id FROM users WHERE id = $2 OR manager_id = $2
+         )`,
       [id, req.userId]
     );
 

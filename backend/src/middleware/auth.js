@@ -13,8 +13,16 @@ export const authenticate = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.userId;
     req.userEmail = decoded.email;
+    req.userRole = decoded.role || 'user';
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Token inválido' });
   }
+};
+
+export const requireAdmin = (req, res, next) => {
+  if (req.userRole !== 'admin') {
+    return res.status(403).json({ error: 'Acesso restrito ao administrador' });
+  }
+  next();
 };

@@ -5,25 +5,25 @@ import { query } from '../db.js';
 
 const router = Router();
 
-// Register
 router.post('/register', async (req, res) => {
   try {
+    if (process.env.ALLOW_REGISTRATION !== 'true') {
+      return res.status(403).json({ error: 'Registro de novos usuários está desabilitado' });
+    }
+
     const { email, password, name } = req.body;
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
     }
 
-    // Check if user exists
     const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create user
     const result = await query(
       'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
       [email, passwordHash, name]
@@ -31,9 +31,13 @@ router.post('/register', async (req, res) => {
 
     const user = result.rows[0];
 
-    // Generate token
+    await query(
+      'INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT (user_id, role) DO NOTHING',
+      [user.id, 'user']
+    );
+
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, role: 'user' },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -54,9 +58,8 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    // Find user
     const result = await query(
-      'SELECT id, email, name, password_hash FROM users WHERE email = $1',
+      'SELECT id, email, name, password_hash, status FROM users WHERE email = $1',
       [email]
     );
 
@@ -66,21 +69,34 @@ router.post('/login', async (req, res) => {
 
     const user = result.rows[0];
 
-    // Check password
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    // Generate token
+    if (user.status === 'inactive') {
+      return res.status(403).json({ error: 'Usuário inativo' });
+    }
+
+    if (user.status === 'blocked') {
+      return res.status(403).json({ error: 'Usuário bloqueado' });
+    }
+
+    const roleResult = await query(
+      "SELECT role FROM user_roles WHERE user_id = $1 ORDER BY CASE WHEN role = 'admin' THEN 1 WHEN role = 'manager' THEN 2 ELSE 3 END LIMIT 1",
+      [user.id]
+    );
+
+    const role = roleResult.rows[0]?.role || 'user';
+
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     res.json({
-      user: { id: user.id, email: user.email, name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, role },
       token
     });
   } catch (error) {
@@ -100,9 +116,9 @@ router.get('/me', async (req, res) => {
   try {
     const token = authHeader.replace('Bearer ', '');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     const result = await query(
-      'SELECT id, email, name, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, status, created_at FROM users WHERE id = $1',
       [decoded.userId]
     );
 
@@ -110,7 +126,24 @@ router.get('/me', async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    res.json({ user: result.rows[0] });
+    const user = result.rows[0];
+
+    if (user.status === 'inactive') {
+      return res.status(403).json({ error: 'Usuário inativo' });
+    }
+
+    if (user.status === 'blocked') {
+      return res.status(403).json({ error: 'Usuário bloqueado' });
+    }
+
+    const roleResult = await query(
+      "SELECT role FROM user_roles WHERE user_id = $1 ORDER BY CASE WHEN role = 'admin' THEN 1 WHEN role = 'manager' THEN 2 ELSE 3 END LIMIT 1",
+      [user.id]
+    );
+
+    const role = roleResult.rows[0]?.role || 'user';
+
+    res.json({ user: { ...user, role } });
   } catch (error) {
     res.status(401).json({ error: 'Token inválido' });
   }

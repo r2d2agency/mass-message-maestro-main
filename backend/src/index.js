@@ -6,6 +6,7 @@ import connectionsRoutes from './routes/connections.js';
 import messagesRoutes from './routes/messages.js';
 import contactsRoutes from './routes/contacts.js';
 import campaignsRoutes from './routes/campaigns.js';
+import usersRoutes from './routes/users.js';
 import { testConnection } from './db.js';
 import { startWorker } from './services/worker.js';
 
@@ -44,6 +45,7 @@ app.use('/api/connections', connectionsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api/campaigns', campaignsRoutes);
+app.use('/api/users', usersRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
