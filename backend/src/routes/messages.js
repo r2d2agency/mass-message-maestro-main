@@ -56,7 +56,13 @@ router.post('/upload', upload.single('file'), (req, res) => {
       : protocolHeader || req.protocol;
 
     const host = req.get('host');
-    const url = `${protocol}://${host}/uploads/media/${req.file.filename}`;
+    let url;
+    
+    if (process.env.PUBLIC_URL) {
+      url = `${process.env.PUBLIC_URL}/uploads/media/${req.file.filename}`;
+    } else {
+      url = `${protocol}://${host}/uploads/media/${req.file.filename}`;
+    }
 
     res.json({ url });
   } catch (error) {

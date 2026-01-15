@@ -77,6 +77,8 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
         continue;
       }
 
+      console.log(`Sending media to ${phone}: ${msg.mediaUrl} (Type: ${msg.kind})`);
+
       const response = await fetch(`${apiUrl}/message/sendMedia/${instanceName}`, {
         method: 'POST',
         headers: {
