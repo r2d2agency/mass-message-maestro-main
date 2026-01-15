@@ -63,6 +63,35 @@ router.post('/lists', async (req, res) => {
   }
 });
 
+// Update contact list
+router.patch('/lists/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
+
+    const result = await query(
+      `UPDATE contact_lists 
+       SET name = $1, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
+      [name.trim(), id, req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Lista não encontrada' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Update contact list error:', error);
+    res.status(500).json({ error: 'Erro ao atualizar lista de contatos' });
+  }
+});
+
 // Delete contact list
 router.delete('/lists/:id', async (req, res) => {
   try {
@@ -222,6 +251,155 @@ router.post('/lists/:listId/contacts', async (req, res) => {
   } catch (error) {
     console.error('Add contact error:', error);
     res.status(500).json({ error: 'Erro ao adicionar contato' });
+  }
+});
+
+// Update contact
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone } = req.body;
+
+    if (!name && !phone) {
+      return res.status(400).json({ error: 'Nada para atualizar' });
+    }
+
+    const contactResult = await query(
+      `SELECT c.id, c.list_id, c.phone
+       FROM contacts c
+       JOIN contact_lists cl ON c.list_id = cl.id
+       WHERE c.id = $1 AND cl.user_id = $2`,
+      [id, req.userId]
+    );
+
+    if (contactResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Contato não encontrado' });
+    }
+
+    const current = contactResult.rows[0];
+    let newName = name;
+    let newPhone = phone;
+
+    if (typeof newName === 'string') {
+      newName = newName.trim();
+    }
+
+    if (typeof newPhone === 'string') {
+      newPhone = newPhone.toString().trim();
+    }
+
+    let normalizedPhone = current.phone;
+
+    if (newPhone) {
+      const digits = newPhone.replace(/\D/g, '');
+      const MIN_PHONE_LENGTH = 8;
+
+      if (!digits || digits.length < MIN_PHONE_LENGTH) {
+        return res.status(400).json({ error: 'Número de telefone inválido' });
+      }
+
+      const duplicateCheck = await query(
+        `SELECT id FROM contacts 
+         WHERE list_id = $1 AND phone = $2 AND id <> $3`,
+        [current.list_id, digits, id]
+      );
+
+      if (duplicateCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Já existe um contato com este número na lista' });
+      }
+
+      const connectionResult = await query(
+        `SELECT api_url, api_key, instance_name
+         FROM connections
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [req.userId]
+      );
+
+      if (connectionResult.rows.length === 0) {
+        return res.status(400).json({
+          error: 'Configure uma conexão Evolution antes de atualizar contatos',
+        });
+      }
+
+      const { api_url, api_key, instance_name } = connectionResult.rows[0];
+
+      let isWhatsapp = false;
+
+      try {
+        const evoResponse = await fetch(
+          `${api_url}/chat/whatsappNumbers/${instance_name}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: api_key,
+            },
+            body: JSON.stringify({ numbers: [digits] }),
+          }
+        );
+
+        if (!evoResponse.ok) {
+          console.error('Evolution whatsappNumbers error status (update):', evoResponse.status);
+          return res.status(502).json({
+            error: 'Não foi possível validar o número com a Evolution API',
+          });
+        }
+
+        const evoData = await evoResponse.json();
+
+        const resultsArray = Array.isArray(evoData)
+          ? evoData
+          : Array.isArray(evoData.numbers)
+          ? evoData.numbers
+          : Array.isArray(evoData.result)
+          ? evoData.result
+          : Array.isArray(evoData.response)
+          ? evoData.response
+          : [];
+
+        for (const item of resultsArray) {
+          const num = (item.number || item.phone || '').toString().replace(/\D/g, '');
+          const exists =
+            item.exists === true ||
+            item.isWhatsapp === true ||
+            item.is_whatsapp === true ||
+            item.isWhatsApp === true;
+
+          if (num === digits && exists) {
+            isWhatsapp = true;
+            break;
+          }
+        }
+      } catch (err) {
+        console.error('Evolution whatsappNumbers request failed (update):', err);
+        return res.status(502).json({
+          error: 'Não foi possível validar o número com a Evolution API',
+        });
+      }
+
+      if (!isWhatsapp) {
+        return res.status(400).json({ error: 'Número não é WhatsApp válido' });
+      }
+
+      normalizedPhone = digits;
+    }
+
+    const result = await query(
+      `UPDATE contacts 
+       SET name = COALESCE($1, name),
+           phone = COALESCE($2, phone),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [newName || null, newPhone ? normalizedPhone : null, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Update contact error:', error);
+    res.status(500).json({ error: 'Erro ao atualizar contato' });
   }
 });
 

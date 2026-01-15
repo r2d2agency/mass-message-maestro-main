@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2 } from "lucide-react";
+import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2, Pencil } from "lucide-react";
 import { api } from "@/lib/api";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
@@ -103,6 +103,13 @@ const Contatos = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [importTargetMode, setImportTargetMode] = useState<"new" | "existing">("new");
   const [importTargetListId, setImportTargetListId] = useState<string | null>(null);
+  const [isListDialogOpen, setIsListDialogOpen] = useState(false);
+  const [editingListId, setEditingListId] = useState<string | null>(null);
+  const [listNameInput, setListNameInput] = useState("");
+  const [isSavingList, setIsSavingList] = useState(false);
+  const [isEditContactOpen, setIsEditContactOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [isUpdatingContact, setIsUpdatingContact] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -158,6 +165,164 @@ const Contatos = () => {
           error instanceof Error ? error.message : "Tente novamente mais tarde",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleOpenCreateList = () => {
+    setEditingListId(null);
+    setListNameInput("");
+    setIsListDialogOpen(true);
+  };
+
+  const handleOpenEditList = (list: ContactList) => {
+    setEditingListId(list.id);
+    setListNameInput(list.name);
+    setIsListDialogOpen(true);
+  };
+
+  const handleSaveList = async () => {
+    try {
+      if (!listNameInput.trim()) {
+        toast({
+          title: "Informe o nome da lista",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsSavingList(true);
+
+      if (editingListId) {
+        const updated = await api<ApiContactList>(`/api/contacts/lists/${editingListId}`, {
+          method: "PATCH",
+          body: { name: listNameInput.trim() },
+        });
+
+        setLists((prev) =>
+          prev.map((list) =>
+            list.id === updated.id
+              ? {
+                  id: updated.id,
+                  name: updated.name,
+                  contactCount: Number(updated.contact_count) || list.contactCount,
+                  createdAt: new Date(updated.created_at).toLocaleDateString("pt-BR"),
+                }
+              : list
+          )
+        );
+      } else {
+        const created = await api<ApiContactList>("/api/contacts/lists", {
+          method: "POST",
+          body: { name: listNameInput.trim() },
+        });
+
+        setLists((prev) => [
+          {
+            id: created.id,
+            name: created.name,
+            contactCount: Number(created.contact_count) || 0,
+            createdAt: new Date(created.created_at).toLocaleDateString("pt-BR"),
+          },
+          ...prev,
+        ]);
+      }
+
+      setIsListDialogOpen(false);
+      setEditingListId(null);
+      setListNameInput("");
+
+      toast({
+        title: "Lista salva com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao salvar lista",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingList(false);
+    }
+  };
+
+  const handleDeleteList = async (id: string) => {
+    try {
+      await api(`/api/contacts/lists/${id}`, { method: "DELETE" });
+      setLists((prev) => prev.filter((list) => list.id !== id));
+      setContacts((prev) => prev.filter((contact) => contact.listId !== id));
+      if (selectedList === id) {
+        setSelectedList(null);
+      }
+      toast({ title: "Lista removida com sucesso" });
+    } catch (error) {
+      toast({
+        title: "Erro ao remover lista",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleOpenEditContact = (contact: Contact) => {
+    setEditingContact(contact);
+    setNewContactName(contact.name);
+    setNewContactPhone(contact.phone);
+    setIsEditContactOpen(true);
+  };
+
+  const handleUpdateContact = async () => {
+    try {
+      if (!editingContact) {
+        return;
+      }
+
+      if (!newContactName.trim() && !newContactPhone.trim()) {
+        toast({
+          title: "Informe nome ou telefone para atualizar",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsUpdatingContact(true);
+
+      const updated = await api<ApiCreatedContact>(`/api/contacts/${editingContact.id}`, {
+        method: "PATCH",
+        body: {
+          name: newContactName.trim() || undefined,
+          phone: newContactPhone.trim() || undefined,
+        },
+      });
+
+      setContacts((prev) =>
+        prev.map((contact) =>
+          contact.id === updated.id
+            ? {
+                id: updated.id,
+                name: updated.name,
+                phone: updated.phone,
+                listId: updated.list_id,
+              }
+            : contact
+        )
+      );
+
+      setIsEditContactOpen(false);
+      setEditingContact(null);
+      setNewContactName("");
+      setNewContactPhone("");
+
+      toast({
+        title: "Contato atualizado com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao atualizar contato",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingContact(false);
     }
   };
 
@@ -577,6 +742,54 @@ const Contatos = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Dialog open={isListDialogOpen} onOpenChange={setIsListDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" onClick={handleOpenCreateList}>
+                  <Plus className="h-4 w-4" />
+                  Nova Lista
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingListId ? "Editar Lista" : "Nova Lista"}</DialogTitle>
+                  <DialogDescription>
+                    {editingListId
+                      ? "Altere o nome da lista selecionada."
+                      : "Crie uma nova lista de contatos."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="listNameDialog">Nome da Lista</Label>
+                    <Input
+                      id="listNameDialog"
+                      placeholder="Nome da lista"
+                      value={listNameInput}
+                      onChange={(e) => setListNameInput(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsListDialogOpen(false)}
+                    disabled={isSavingList}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="gradient"
+                    onClick={handleSaveList}
+                    disabled={isSavingList}
+                  >
+                    {isSavingList && (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    Salvar
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
             {selectedList && (
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
@@ -638,12 +851,12 @@ const Contatos = () => {
               <DialogTrigger asChild>
                 <Button variant="gradient">
                   <Upload className="h-4 w-4" />
-                  Importar Lista
+                  Importar Contatos
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
                 <DialogHeader>
-                  <DialogTitle>Importar Lista de Contatos</DialogTitle>
+                  <DialogTitle>Importar Contatos</DialogTitle>
                   <DialogDescription>
                     Faça upload de uma arquivo CSV com os contatos
                   </DialogDescription>
@@ -842,7 +1055,29 @@ const Contatos = () => {
                     </p>
                   </div>
                 </div>
-                <Badge variant="secondary">{list.createdAt}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{list.createdAt}</Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEditList(list);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteList(list.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -894,8 +1129,12 @@ const Contatos = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon">
-                            <Eye className="h-4 w-4" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenEditContact(contact)}
+                          >
+                            <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -914,6 +1153,55 @@ const Contatos = () => {
             </div>
           </CardContent>
         </Card>
+        <Dialog open={isEditContactOpen} onOpenChange={setIsEditContactOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar Contato</DialogTitle>
+              <DialogDescription>
+                Atualize os dados do contato selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="editContactName">Nome</Label>
+                <Input
+                  id="editContactName"
+                  placeholder="Nome do contato"
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editContactPhone">Telefone (com DDD e país)</Label>
+                <Input
+                  id="editContactPhone"
+                  placeholder="5511999999999"
+                  value={newContactPhone}
+                  onChange={(e) => setNewContactPhone(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsEditContactOpen(false)}
+                disabled={isUpdatingContact}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="gradient"
+                onClick={handleUpdateContact}
+                disabled={isUpdatingContact}
+              >
+                {isUpdatingContact && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Salvar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );
