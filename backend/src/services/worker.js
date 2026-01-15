@@ -29,6 +29,7 @@ const resolveMediaForEvolution = (mediaUrl) => {
         else if (ext === '.mov') mime = 'video/quicktime';
         else if (ext === '.mp3') mime = 'audio/mpeg';
         else if (ext === '.ogg') mime = 'audio/ogg';
+        else if (ext === '.webp') mime = 'image/webp';
 
         const base64 = buffer.toString('base64');
         return {
@@ -36,9 +37,15 @@ const resolveMediaForEvolution = (mediaUrl) => {
           mimetype: mime,
           fileName: path.basename(filePath),
         };
+      } else {
+        console.warn(`Local file not found: ${filePath}`);
+        // If it's supposed to be local but missing, we should probably fail or warn
+        // returning null to trigger error downstream instead of sending broken URL
+        return { error: 'Arquivo de mídia não encontrado no servidor (upload perdido?)' };
       }
     }
-  } catch {
+  } catch (err) {
+    console.error('Error resolving media:', err);
   }
 
   return { media: mediaUrl, mimetype: undefined, fileName: undefined };
@@ -124,6 +131,10 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
       console.log(`Sending media to ${phone}: ${msg.mediaUrl} (Type: ${msg.kind})`);
 
       const mediaData = resolveMediaForEvolution(msg.mediaUrl);
+
+      if (mediaData.error) {
+        throw new Error(mediaData.error);
+      }
 
       if (!mediaData.media) {
         continue;
