@@ -11,43 +11,67 @@ const resolveMediaForEvolution = (mediaUrl) => {
   if (!mediaUrl) return { media: null, mimetype: undefined, fileName: undefined };
 
   try {
-    const url = new URL(mediaUrl);
+    // Try to parse as URL first
+    let pathname = '';
+    try {
+      const url = new URL(mediaUrl);
+      pathname = decodeURIComponent(url.pathname);
+    } catch (e) {
+      // If invalid URL, assume it might be a relative path if it contains uploads
+      pathname = decodeURIComponent(mediaUrl);
+    }
 
-    if (url.pathname.startsWith('/api/uploads/')) {
-      const relativePath = url.pathname.replace('/api/uploads/', '');
-      const filePath = path.join(uploadsPath, relativePath);
+    console.log(`Resolving media: ${mediaUrl} -> Pathname: ${pathname}`);
 
-      if (fs.existsSync(filePath)) {
-        const buffer = fs.readFileSync(filePath);
-        const ext = path.extname(filePath).toLowerCase();
+    // Check if it looks like a local upload
+    // Matches /api/uploads/..., /uploads/..., or even just contains /uploads/media/
+    if (pathname.includes('/uploads/media/')) {
+       // Extract the part after /uploads/
+       // E.g. /api/uploads/media/file.jpg -> media/file.jpg
+       // E.g. /uploads/media/file.jpg -> media/file.jpg
+       const parts = pathname.split('/uploads/');
+       if (parts.length > 1) {
+         const relativePath = parts[1]; // media/file.jpg
+         const filePath = path.join(uploadsPath, relativePath);
 
-        let mime = 'application/octet-stream';
-        if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
-        else if (ext === '.png') mime = 'image/png';
-        else if (ext === '.gif') mime = 'image/gif';
-        else if (ext === '.mp4') mime = 'video/mp4';
-        else if (ext === '.mov') mime = 'video/quicktime';
-        else if (ext === '.mp3') mime = 'audio/mpeg';
-        else if (ext === '.ogg') mime = 'audio/ogg';
-        else if (ext === '.webp') mime = 'image/webp';
+         console.log(`Checking local file: ${filePath}`);
 
-        const base64 = buffer.toString('base64');
-        return {
-          media: `data:${mime};base64,${base64}`,
-          mimetype: mime,
-          fileName: path.basename(filePath),
-        };
-      } else {
-        console.warn(`Local file not found: ${filePath}`);
-        // If it's supposed to be local but missing, we should probably fail or warn
-        // returning null to trigger error downstream instead of sending broken URL
-        return { error: 'Arquivo de mídia não encontrado no servidor (upload perdido?)' };
-      }
+         if (fs.existsSync(filePath)) {
+           const buffer = fs.readFileSync(filePath);
+           const ext = path.extname(filePath).toLowerCase();
+
+           let mime = 'application/octet-stream';
+           if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+           else if (ext === '.png') mime = 'image/png';
+           else if (ext === '.gif') mime = 'image/gif';
+           else if (ext === '.mp4') mime = 'video/mp4';
+           else if (ext === '.mov') mime = 'video/quicktime';
+           else if (ext === '.mp3') mime = 'audio/mpeg';
+           else if (ext === '.ogg') mime = 'audio/ogg';
+           else if (ext === '.webp') mime = 'image/webp';
+
+           const base64 = buffer.toString('base64');
+           console.log(`Resolved local file to base64 (${mime})`);
+           return {
+             media: `data:${mime};base64,${base64}`,
+             mimetype: mime,
+             fileName: path.basename(filePath),
+           };
+         } else {
+           console.warn(`Local file not found: ${filePath}`);
+           return { error: 'Arquivo de mídia não encontrado no servidor (upload perdido?). Por favor, faça o upload da imagem novamente.' };
+         }
+       }
     }
   } catch (err) {
     console.error('Error resolving media:', err);
   }
 
+  // Fallback to URL only if we are sure it's not a broken local reference
+  // But since we can't be 100% sure, we fall back.
+  // However, if the user is getting DNS errors for "self" references, it's better to fail if we suspect it's local.
+  // But let's stick to the improved detection above. If it contains /uploads/media/ it should have been caught.
+  
   return { media: mediaUrl, mimetype: undefined, fileName: undefined };
 };
 
