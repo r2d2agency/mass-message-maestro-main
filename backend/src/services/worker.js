@@ -1,4 +1,48 @@
 import { query } from '../db.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsPath = path.join(__dirname, '..', '..', 'uploads');
+
+const resolveMediaForEvolution = (mediaUrl) => {
+  if (!mediaUrl) return { media: null, mimetype: undefined, fileName: undefined };
+
+  try {
+    const url = new URL(mediaUrl);
+
+    if (url.pathname.startsWith('/api/uploads/')) {
+      const relativePath = url.pathname.replace('/api/uploads/', '');
+      const filePath = path.join(uploadsPath, relativePath);
+
+      if (fs.existsSync(filePath)) {
+        const buffer = fs.readFileSync(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+
+        let mime = 'application/octet-stream';
+        if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+        else if (ext === '.png') mime = 'image/png';
+        else if (ext === '.gif') mime = 'image/gif';
+        else if (ext === '.mp4') mime = 'video/mp4';
+        else if (ext === '.mov') mime = 'video/quicktime';
+        else if (ext === '.mp3') mime = 'audio/mpeg';
+        else if (ext === '.ogg') mime = 'audio/ogg';
+
+        const base64 = buffer.toString('base64');
+        return {
+          media: `data:${mime};base64,${base64}`,
+          mimetype: mime,
+          fileName: path.basename(filePath),
+        };
+      }
+    }
+  } catch {
+  }
+
+  return { media: mediaUrl, mimetype: undefined, fileName: undefined };
+};
 
 const buildMessagesFromTemplate = (items, contactName) => {
   if (!items || !Array.isArray(items)) return [];
@@ -79,18 +123,34 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
 
       console.log(`Sending media to ${phone}: ${msg.mediaUrl} (Type: ${msg.kind})`);
 
+      const mediaData = resolveMediaForEvolution(msg.mediaUrl);
+
+      if (!mediaData.media) {
+        continue;
+      }
+
+      const body = {
+        number: phone,
+        mediatype: msg.kind,
+        caption: msg.caption || undefined,
+        media: mediaData.media,
+      };
+
+      if (mediaData.mimetype) {
+        body.mimetype = mediaData.mimetype;
+      }
+
+      if (mediaData.fileName) {
+        body.fileName = mediaData.fileName;
+      }
+
       const response = await fetch(`${apiUrl}/message/sendMedia/${instanceName}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           apikey: apiKey,
         },
-        body: JSON.stringify({
-          number: phone,
-          mediatype: msg.kind,
-          caption: msg.caption || undefined,
-          media: msg.mediaUrl,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
