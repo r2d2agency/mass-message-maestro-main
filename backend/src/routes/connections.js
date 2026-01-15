@@ -95,4 +95,72 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/test', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { phone, text } = req.body;
+
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'Telefone de destino é obrigatório' });
+    }
+
+    const connectionRes = await query(
+      `SELECT * FROM connections 
+       WHERE id = $1 
+         AND user_id IN (
+           SELECT id FROM users WHERE id = $2 OR manager_id = $2
+         )`,
+      [id, req.userId]
+    );
+
+    if (connectionRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Conexão não encontrada' });
+    }
+
+    const connection = connectionRes.rows[0];
+
+    const apiUrl = connection.api_url.replace(/\/$/, '');
+    const apiKey = connection.api_key;
+    const instanceName = connection.instance_name;
+
+    const payload = {
+      number: phone,
+      text:
+        typeof text === 'string' && text.trim().length > 0
+          ? text
+          : 'Mensagem de teste enviada pelo Blaster para validar sua conexão.',
+    };
+
+    const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const bodyText = await response.text().catch(() => '');
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: 'Erro ao enviar mensagem de teste',
+        details: bodyText || `Evolution API error (${response.status})`,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Mensagem de teste enviada com sucesso',
+      rawResponse: bodyText || null,
+    });
+  } catch (error) {
+    console.error('Test connection error:', error);
+    res.status(500).json({
+      error: 'Erro ao testar conexão',
+      details: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+});
+
 export default router;

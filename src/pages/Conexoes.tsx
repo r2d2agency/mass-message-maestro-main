@@ -47,6 +47,9 @@ const Conexoes = () => {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isManaging, setIsManaging] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testMessage, setTestMessage] = useState("");
+  const [isSendingTest, setIsSendingTest] = useState(false);
 
   const { toast } = useToast();
 
@@ -210,6 +213,55 @@ const Conexoes = () => {
     }
   };
 
+  const handleSendTestMessage = async () => {
+    if (!selectedConnection) return;
+
+    if (!testPhone.trim()) {
+      toast({
+        title: "Informe o número de telefone para o teste",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSendingTest(true);
+      const response = await api<{
+        success?: boolean;
+        message?: string;
+        error?: string;
+        details?: string;
+      }>(`/api/connections/${selectedConnection.id}/test`, {
+        method: "POST",
+        body: {
+          phone: testPhone.trim(),
+          text: testMessage.trim() || undefined,
+        },
+      });
+
+      if ("error" in response) {
+        toast({
+          title: response.error || "Erro ao enviar mensagem de teste",
+          description: response.details,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: response.message || "Mensagem de teste enviada com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao enviar mensagem de teste",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
   const handleRefreshQR = async () => {
     if (!selectedConnection) return;
     setIsCheckingStatus(true);
@@ -351,18 +403,49 @@ const Conexoes = () => {
             
             <div className="flex flex-col items-center justify-center py-6 space-y-4">
               {connectionState.status === "connected" ? (
-                <div className="text-center space-y-2">
-                  <div className="h-24 w-24 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600">
-                    <Smartphone className="h-12 w-12" />
+                <div className="w-full space-y-6">
+                  <div className="text-center space-y-2">
+                    <div className="h-24 w-24 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600">
+                      <Smartphone className="h-12 w-12" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-green-600">WhatsApp Conectado!</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {connectionState.phoneNumber && `Número: ${connectionState.phoneNumber}`}
+                    </p>
+                    <Button variant="destructive" onClick={handleDisconnect} disabled={isCheckingStatus}>
+                      <Unplug className="h-4 w-4 mr-2" />
+                      Desconectar
+                    </Button>
                   </div>
-                  <h3 className="text-lg font-semibold text-green-600">WhatsApp Conectado!</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {connectionState.phoneNumber && `Número: ${connectionState.phoneNumber}`}
-                  </p>
-                  <Button variant="destructive" onClick={handleDisconnect} disabled={isCheckingStatus}>
-                    <Unplug className="h-4 w-4 mr-2" />
-                    Desconectar
-                  </Button>
+
+                  <div className="border rounded-lg p-4 space-y-3 text-left w-full">
+                    <h4 className="font-semibold text-sm">Enviar mensagem de teste</h4>
+                    <div className="space-y-2">
+                      <Label htmlFor="testPhone">Telefone de teste (com DDI/DD)</Label>
+                      <Input
+                        id="testPhone"
+                        placeholder="Ex: 5599999999999"
+                        value={testPhone}
+                        onChange={(e) => setTestPhone(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="testMessage">Mensagem (opcional)</Label>
+                      <Input
+                        id="testMessage"
+                        placeholder="Mensagem de teste para validar a conexão"
+                        value={testMessage}
+                        onChange={(e) => setTestMessage(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      className="w-full"
+                      onClick={handleSendTestMessage}
+                      disabled={isSendingTest}
+                    >
+                      {isSendingTest ? "Enviando teste..." : "Enviar mensagem de teste"}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center space-y-4 w-full">

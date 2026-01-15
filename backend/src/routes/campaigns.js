@@ -180,7 +180,15 @@ router.get('/:id/messages', async (req, res) => {
     }
 
     const result = await query(
-      `SELECT cm.id, cm.campaign_id, cm.contact_id, cm.phone, cm.status, cm.sent_at, cm.created_at,
+      `SELECT cm.id,
+              cm.campaign_id,
+              cm.contact_id,
+              cm.phone,
+              cm.status,
+              cm.scheduled_for,
+              cm.sent_at,
+              cm.error_message,
+              cm.created_at,
               c.name as contact_name
        FROM campaign_messages cm
        LEFT JOIN contacts c ON cm.contact_id = c.id

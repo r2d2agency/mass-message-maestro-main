@@ -75,6 +75,8 @@ interface SendLog {
   phone: string;
   status: "sent" | "failed" | "pending";
   sentAt: string;
+  scheduledFor: string;
+  errorMessage: string | null;
 }
 
 interface ApiCampaign {
@@ -97,6 +99,8 @@ interface ApiSendLog {
   phone: string;
   status: "sent" | "failed" | "pending" | "processing";
   sent_at: string | null;
+  scheduled_for: string | null;
+  error_message: string | null;
   created_at: string;
 }
 
@@ -480,6 +484,15 @@ const Campanhas = () => {
           phone: log.phone,
           status:
             log.status === "sent" || log.status === "failed" ? log.status : "pending",
+          scheduledFor: log.scheduled_for
+            ? new Date(log.scheduled_for).toLocaleString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "-",
+          errorMessage: log.error_message,
           sentAt: log.sent_at
             ? new Date(log.sent_at).toLocaleString("pt-BR", {
                 day: "2-digit",
@@ -895,16 +908,18 @@ const Campanhas = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Contato</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Enviado em</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Contato</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Agendado para</TableHead>
+                          <TableHead>Enviado em</TableHead>
+                          <TableHead>Detalhes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                     {isLoadingMonitor && (
                       <TableRow>
                         <TableCell
@@ -940,11 +955,17 @@ const Campanhas = () => {
                               </Badge>
                             )}
                           </TableCell>
+                          <TableCell>{log.scheduledFor}</TableCell>
                           <TableCell>{log.sentAt}</TableCell>
+                          <TableCell>
+                            {log.errorMessage && log.status === "failed"
+                              ? log.errorMessage
+                              : "-"}
+                          </TableCell>
                         </TableRow>
                       ))}
-                  </TableBody>
-                </Table>
+                      </TableBody>
+                    </Table>
               </CardContent>
             </Card>
           </TabsContent>
