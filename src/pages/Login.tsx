@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Zap } from 'lucide-react';
 import { z } from 'zod';
+import { api } from '@/lib/api';
 
 const loginSchema = z.object({
   email: z.string().trim().email({ message: 'Email inválido' }),
@@ -19,9 +20,23 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const { login } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const data = await api<{ logoUrl: string | null; faviconUrl: string | null }>(
+          "/api/auth/branding",
+          { auth: false }
+        );
+        if (data.logoUrl) setLogoUrl(data.logoUrl);
+      } catch {}
+    };
+    loadBranding();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,9 +73,13 @@ const Login = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-full">
-              <Zap className="h-8 w-8 text-primary" />
-            </div>
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="h-16 w-auto object-contain" />
+            ) : (
+              <div className="bg-primary/10 p-3 rounded-full">
+                <Zap className="h-8 w-8 text-primary" />
+              </div>
+            )}
           </div>
           <CardTitle className="text-2xl">Entrar no Blaster</CardTitle>
           <CardDescription>Digite seu email e senha para acessar</CardDescription>

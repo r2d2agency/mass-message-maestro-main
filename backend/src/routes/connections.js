@@ -98,7 +98,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/test', async (req, res) => {
   try {
     const { id } = req.params;
-    const { phone, text } = req.body;
+    const { phone, text, mediaUrl, mediaType } = req.body;
 
     if (!phone || typeof phone !== 'string') {
       return res.status(400).json({ error: 'Telefone de destino é obrigatório' });
@@ -123,15 +123,28 @@ router.post('/:id/test', async (req, res) => {
     const apiKey = connection.api_key;
     const instanceName = connection.instance_name;
 
-    const payload = {
-      number: phone,
-      text:
-        typeof text === 'string' && text.trim().length > 0
-          ? text
-          : 'Mensagem de teste enviada pelo Blaster para validar sua conexão.',
-    };
+    let endpoint = `${apiUrl}/message/sendText/${instanceName}`;
+    let payload = {};
 
-    const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
+    if (mediaUrl) {
+      endpoint = `${apiUrl}/message/sendMedia/${instanceName}`;
+      payload = {
+        number: phone,
+        mediatype: mediaType || 'image',
+        media: mediaUrl,
+        caption: text || '',
+      };
+    } else {
+      payload = {
+        number: phone,
+        text:
+          typeof text === 'string' && text.trim().length > 0
+            ? text
+            : 'Mensagem de teste enviada pelo Blaster para validar sua conexão.',
+      };
+    }
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

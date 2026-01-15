@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Settings, Shield, Bell, Save } from "lucide-react";
+import { Settings, Shield, Bell, Save, Image as ImageIcon } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { api, uploadFile } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const SETTINGS_STORAGE_KEY = "app_settings";
 
@@ -21,6 +24,8 @@ interface AppSettings {
 }
 
 const Configuracoes = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [darkMode, setDarkMode] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [notifyCampaignCompleted, setNotifyCampaignCompleted] = useState(true);
@@ -29,6 +34,11 @@ const Configuracoes = () => {
   const [dailyLimit, setDailyLimit] = useState("");
   const [minPause, setMinPause] = useState("");
   const [maxPause, setMaxPause] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [faviconUrl, setFaviconUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [isSavingBranding, setIsSavingBranding] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -74,6 +84,26 @@ const Configuracoes = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const data = await api<{ logoUrl: string | null; faviconUrl: string | null }>(
+          "/api/auth/branding",
+          { auth: false }
+        );
+        if (data.logoUrl) {
+          setLogoUrl(data.logoUrl);
+        }
+        if (data.faviconUrl) {
+          setFaviconUrl(data.faviconUrl);
+        }
+      } catch {
+      }
+    };
+
+    loadBranding();
+  }, []);
+
   const handleSave = () => {
     if (typeof window === "undefined") return;
 
@@ -96,6 +126,94 @@ const Configuracoes = () => {
     };
 
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  };
+
+  const handleLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setLogoFile(file);
+  };
+
+  const handleFaviconFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setFaviconFile(file);
+  };
+
+  const handleUploadLogo = async () => {
+    if (!user || user.role !== "admin") {
+      toast({
+        title: "Apenas o super admin pode alterar a logo",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!logoFile) {
+      toast({
+        title: "Selecione um arquivo de logo",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSavingBranding(true);
+      const uploaded = await uploadFile<{ url: string }>("/api/messages/upload", logoFile);
+
+      await api(`/api/users/${user.id}/branding`, {
+        method: "PATCH",
+        body: { logoUrl: uploaded.url },
+      });
+
+      setLogoUrl(uploaded.url);
+      toast({ title: "Logo do sistema atualizada" });
+    } catch (error) {
+      toast({
+        title: "Erro ao enviar logo",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingBranding(false);
+    }
+  };
+
+  const handleUploadFavicon = async () => {
+    if (!user || user.role !== "admin") {
+      toast({
+        title: "Apenas o super admin pode alterar o favicon",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!faviconFile) {
+      toast({
+        title: "Selecione um arquivo de favicon",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSavingBranding(true);
+      const uploaded = await uploadFile<{ url: string }>("/api/messages/upload", faviconFile);
+
+      await api(`/api/users/${user.id}/branding`, {
+        method: "PATCH",
+        body: { faviconUrl: uploaded.url },
+      });
+
+      setFaviconUrl(uploaded.url);
+      toast({ title: "Favicon do sistema atualizado" });
+    } catch (error) {
+      toast({
+        title: "Erro ao enviar favicon",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingBranding(false);
+    }
   };
 
   return (
@@ -250,6 +368,88 @@ const Configuracoes = () => {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="animate-fade-in shadow-card lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5 text-primary" />
+                Marca do Sistema
+              </CardTitle>
+              <CardDescription>
+                Logo e favicon configurados pelo super admin
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {user?.role !== "admin" ? (
+                <p className="text-sm text-muted-foreground">
+                  Apenas o super admin pode alterar a identidade visual do sistema.
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <Label>Logo do sistema</Label>
+                      {logoUrl && (
+                        <div className="mb-2 flex items-center gap-3">
+                          <img
+                            src={logoUrl}
+                            alt="Logo atual"
+                            className="h-10 w-10 rounded-md border border-border bg-background object-contain"
+                          />
+                          <span className="text-xs text-muted-foreground break-all">
+                            {logoUrl}
+                          </span>
+                        </div>
+                      )}
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoFileChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2"
+                        onClick={handleUploadLogo}
+                        disabled={isSavingBranding}
+                      >
+                        Enviar logo
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      <Label>Favicon</Label>
+                      {faviconUrl && (
+                        <div className="mb-2 flex items-center gap-3">
+                          <img
+                            src={faviconUrl}
+                            alt="Favicon atual"
+                            className="h-6 w-6 rounded-md border border-border bg-background object-contain"
+                          />
+                          <span className="text-xs text-muted-foreground break-all">
+                            {faviconUrl}
+                          </span>
+                        </div>
+                      )}
+                      <Input
+                        type="file"
+                        accept="image/x-icon,image/png,image/jpeg"
+                        onChange={handleFaviconFileChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2"
+                        onClick={handleUploadFavicon}
+                        disabled={isSavingBranding}
+                      >
+                        Enviar favicon
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -42,15 +42,16 @@ export const scheduleCampaign = async (campaignId) => {
 
     let nextTime = new Date(startTime);
     
-    // Default delays
+    // Default delays (seconds) based on campaign configuration
     let minDelay = campaign.min_delay || 90;
     let maxDelay = campaign.max_delay || 300;
 
     const batchSize = 20;
     const pauseSeconds = 600; // 10 minutes
 
-    // If end_at is provided, calculate dynamic delays to fit in the window
-    if (campaign.end_at) {
+    // If end_at is provided and delays were not explicitly customized,
+    // calculate dynamic delays to fit in the window
+    if (campaign.end_at && (!campaign.min_delay || !campaign.max_delay)) {
       const endTime = new Date(campaign.end_at);
       const totalDurationSeconds = (endTime.getTime() - startTime.getTime()) / 1000;
 

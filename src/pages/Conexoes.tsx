@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Trash2, Plug, RefreshCw, QrCode, Power, Smartphone, Unplug } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, uploadFile } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { evolutionApi, EvolutionConfig, ConnectionState } from "@/lib/evolution-api";
 
@@ -49,6 +49,7 @@ const Conexoes = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [testMessage, setTestMessage] = useState("");
+  const [testMediaFile, setTestMediaFile] = useState<File | null>(null);
   const [isSendingTest, setIsSendingTest] = useState(false);
 
   const { toast } = useToast();
@@ -213,6 +214,11 @@ const Conexoes = () => {
     }
   };
 
+  const handleTestMediaChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setTestMediaFile(file);
+  };
+
   const handleSendTestMessage = async () => {
     if (!selectedConnection) return;
 
@@ -226,6 +232,19 @@ const Conexoes = () => {
 
     try {
       setIsSendingTest(true);
+
+      let mediaUrl: string | undefined;
+      let mediaType: string | undefined;
+
+      if (testMediaFile) {
+        const uploaded = await uploadFile<{ url: string }>("/api/messages/upload", testMediaFile);
+        mediaUrl = uploaded.url;
+        
+        if (testMediaFile.type.startsWith('image/')) mediaType = 'image';
+        else if (testMediaFile.type.startsWith('video/')) mediaType = 'video';
+        else mediaType = 'document';
+      }
+
       const response = await api<{
         success?: boolean;
         message?: string;
@@ -236,6 +255,8 @@ const Conexoes = () => {
         body: {
           phone: testPhone.trim(),
           text: testMessage.trim() || undefined,
+          mediaUrl,
+          mediaType
         },
       });
 
@@ -427,6 +448,14 @@ const Conexoes = () => {
                         placeholder="Ex: 5599999999999"
                         value={testPhone}
                         onChange={(e) => setTestPhone(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="testMedia">Mídia (opcional)</Label>
+                      <Input
+                        id="testMedia"
+                        type="file"
+                        onChange={handleTestMediaChange}
                       />
                     </div>
                     <div className="space-y-2">

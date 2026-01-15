@@ -10,6 +10,7 @@ router.get('/', async (req, res) => {
   try {
     const result = await query(
       `SELECT u.id, u.email, u.name, u.status, u.plan_name, u.monthly_message_limit,
+              u.logo_url, u.favicon_url,
               u.created_at, u.updated_at,
               COALESCE((
                 SELECT role FROM user_roles ur
@@ -148,6 +149,40 @@ router.patch('/:id/plan', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar plano do usuário' });
+  }
+});
+
+router.patch('/:id/branding', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { logoUrl, faviconUrl } = req.body;
+
+    const result = await query(
+      `UPDATE users 
+       SET logo_url = COALESCE($1, logo_url),
+           favicon_url = COALESCE($2, favicon_url),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, email, name, status, logo_url, favicon_url`,
+      [logoUrl ?? null, faviconUrl ?? null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const user = result.rows[0];
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      status: user.status,
+      logoUrl: user.logo_url,
+      faviconUrl: user.favicon_url,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar branding do usuário' });
   }
 });
 

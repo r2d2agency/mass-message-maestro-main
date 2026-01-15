@@ -59,9 +59,9 @@ router.post('/upload', upload.single('file'), (req, res) => {
     let url;
     
     if (process.env.PUBLIC_URL) {
-      url = `${process.env.PUBLIC_URL}/uploads/media/${req.file.filename}`;
+      url = `${process.env.PUBLIC_URL}/api/uploads/media/${req.file.filename}`;
     } else {
-      url = `${protocol}://${host}/uploads/media/${req.file.filename}`;
+      url = `${protocol}://${host}/api/uploads/media/${req.file.filename}`;
     }
 
     res.json({ url });

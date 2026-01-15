@@ -149,4 +149,29 @@ router.get('/me', async (req, res) => {
   }
 });
 
+router.get('/branding', async (_req, res) => {
+  try {
+    const result = await query(
+      `SELECT u.logo_url, u.favicon_url
+       FROM users u
+       JOIN user_roles ur ON ur.user_id = u.id AND ur.role = 'admin'
+       ORDER BY u.created_at ASC
+       LIMIT 1`
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ logoUrl: null, faviconUrl: null });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      logoUrl: row.logo_url || null,
+      faviconUrl: row.favicon_url || null,
+    });
+  } catch (error) {
+    console.error('Branding fetch error:', error);
+    res.status(500).json({ error: 'Erro ao carregar branding' });
+  }
+});
+
 export default router;

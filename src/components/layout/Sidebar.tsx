@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -27,12 +28,30 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [now, setNow] = useState(new Date());
+  const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setNow(new Date());
     }, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const data = await api<{ logoUrl: string | null; faviconUrl: string | null }>(
+          "/api/auth/branding",
+          { auth: false }
+        );
+        if (data.logoUrl) {
+          setBrandingLogoUrl(data.logoUrl);
+        }
+      } catch {
+      }
+    };
+
+    loadBranding();
   }, []);
 
   const handleLogout = () => {
@@ -48,20 +67,30 @@ export function Sidebar() {
   });
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-card border-r border-border shadow-card">
-      <div className="flex h-full flex-col">
+    <aside className="bg-card border-b border-border shadow-card lg:fixed lg:left-0 lg:top-0 lg:z-40 lg:h-screen lg:w-64 lg:border-r">
+      <div className="flex flex-col lg:h-full">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 px-6 border-b border-border">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary">
-            <Zap className="h-5 w-5 text-primary-foreground" />
-          </div>
+          {brandingLogoUrl ? (
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+              <img
+                src={brandingLogoUrl}
+                alt="Logo"
+                className="h-9 w-9 object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary">
+              <Zap className="h-5 w-5 text-primary-foreground" />
+            </div>
+          )}
           <div>
             <h1 className="text-lg font-bold text-foreground">Blaster</h1>
             <p className="text-xs text-muted-foreground">Disparo em Massa</p>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-1 px-3 py-3 lg:py-4">
           {navigation.map((item) => {
             const isActive = location.pathname === item.href;
             return (
@@ -101,7 +130,7 @@ export function Sidebar() {
           )}
         </nav>
 
-        <div className="border-t border-border p-4">
+        <div className="border-t border-border p-4 hidden lg:block">
           <Button
             variant="outline"
             className="mb-3 flex w-full items-center justify-between text-sm font-medium"

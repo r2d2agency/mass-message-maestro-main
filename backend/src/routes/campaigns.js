@@ -162,6 +162,99 @@ router.get('/:id/stats', async (req, res) => {
   }
 });
 
+// Update campaign
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      connection_id,
+      list_id,
+      message_id,
+      scheduled_at,
+      end_at,
+      min_delay,
+      max_delay
+    } = req.body;
+
+    if (!name || !connection_id || !list_id || !message_id) {
+      return res.status(400).json({
+        error: 'Nome, conexão, lista e mensagem são obrigatórios'
+      });
+    }
+
+    const existing = await query(
+      'SELECT * FROM campaigns WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    const current = existing.rows[0];
+    if (current.status === 'completed' || current.status === 'cancelled') {
+      return res.status(400).json({ error: 'Campanhas concluídas não podem ser editadas' });
+    }
+
+    const checks = await Promise.all([
+      query('SELECT id FROM connections WHERE id = $1 AND user_id = $2', [connection_id, req.userId]),
+      query('SELECT id FROM contact_lists WHERE id = $1 AND user_id = $2', [list_id, req.userId]),
+      query('SELECT id FROM message_templates WHERE id = $1 AND user_id = $2', [message_id, req.userId]),
+    ]);
+
+    if (checks.some(c => c.rows.length === 0)) {
+      return res.status(400).json({ error: 'Recursos inválidos' });
+    }
+
+    await query(
+      'DELETE FROM campaign_messages WHERE campaign_id = $1',
+      [id]
+    );
+
+    const result = await query(
+      `UPDATE campaigns
+       SET name = $1,
+           connection_id = $2,
+           list_id = $3,
+           message_id = $4,
+           scheduled_at = $5,
+           end_at = $6,
+           min_delay = $7,
+           max_delay = $8,
+           status = 'pending',
+           sent_count = 0,
+           failed_count = 0,
+           updated_at = NOW()
+       WHERE id = $9 AND user_id = $10
+       RETURNING *`,
+      [
+        name,
+        connection_id,
+        list_id,
+        message_id,
+        scheduled_at || null,
+        end_at || null,
+        min_delay || 90,
+        max_delay || 300,
+        id,
+        req.userId
+      ]
+    );
+
+    const campaign = result.rows[0];
+
+    scheduleCampaign(campaign.id).catch(err =>
+      console.error(`Failed to reschedule campaign ${campaign.id}:`, err)
+    );
+
+    res.json(campaign);
+  } catch (error) {
+    console.error('Update campaign error:', error);
+    res.status(500).json({ error: 'Erro ao atualizar campanha' });
+  }
+});
+
 router.get('/:id/messages', async (req, res) => {
   try {
     const { id } = req.params;

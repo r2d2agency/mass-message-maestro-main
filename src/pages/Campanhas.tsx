@@ -43,6 +43,7 @@ import {
   Users,
   MessageSquare,
   Shuffle,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -66,6 +67,13 @@ interface Campaign {
   totalContacts: number;
   sentMessages: number;
   scheduledAt?: string;
+  connectionId: string;
+  listId: string;
+  messageId: string;
+  scheduledAtRaw?: string | null;
+  endAtRaw?: string | null;
+  minDelay?: number | null;
+  maxDelay?: number | null;
 }
 
 interface SendLog {
@@ -85,7 +93,13 @@ interface ApiCampaign {
   status: "pending" | "running" | "paused" | "completed" | "cancelled";
   list_name?: string;
   message_name?: string;
-  scheduled_at?: string;
+  scheduled_at?: string | null;
+  end_at?: string | null;
+  min_delay?: number | null;
+  max_delay?: number | null;
+  connection_id: string;
+  list_id: string;
+  message_id: string;
   sent_count: number;
   failed_count: number;
   created_at: string;
@@ -163,6 +177,7 @@ const Campanhas = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("list");
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
   const [campaignName, setCampaignName] = useState("");
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>("");
   const [selectedListId, setSelectedListId] = useState<string>("");
@@ -220,6 +235,13 @@ const Campanhas = () => {
             totalContacts: total,
             sentMessages: sent,
             scheduledAt,
+            connectionId: campaign.connection_id,
+            listId: campaign.list_id,
+            messageId: campaign.message_id,
+            scheduledAtRaw: campaign.scheduled_at ?? null,
+            endAtRaw: campaign.end_at ?? null,
+            minDelay: campaign.min_delay ?? null,
+            maxDelay: campaign.max_delay ?? null,
           };
         });
 
@@ -284,6 +306,12 @@ const Campanhas = () => {
       // ignore
     }
   }, []);
+
+  const formatTimeForInput = (date: Date) => {
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    return `${hours}:${minutes}`;
+  };
 
   const handleCreateCampaign = async () => {
     if (!campaignName.trim()) {
@@ -374,6 +402,15 @@ const Campanhas = () => {
     let min_delay = Math.max(Math.floor(avgInterval * 0.6), 10);
     let max_delay = Math.max(Math.floor(avgInterval * 1.4), min_delay + 5);
 
+    const pauseMinutesNumber = Number.parseInt(pauseInterval, 10);
+    if (!Number.isNaN(pauseMinutesNumber) && pauseMinutesNumber > 0) {
+      const maxFromInput = pauseMinutesNumber * 60;
+      max_delay = maxFromInput;
+      if (min_delay > max_delay) {
+        min_delay = Math.max(10, Math.floor(max_delay * 0.6));
+      }
+    }
+
     if (appSettings?.minPauseSeconds && appSettings.minPauseSeconds > 0) {
       min_delay = Math.max(min_delay, appSettings.minPauseSeconds);
     }
@@ -392,8 +429,14 @@ const Campanhas = () => {
     try {
       setIsSubmitting(true);
 
-      await api<ApiCampaign>("/api/campaigns", {
-        method: "POST",
+      const endpoint = editingCampaignId
+        ? `/api/campaigns/${editingCampaignId}`
+        : "/api/campaigns";
+
+      const method = editingCampaignId ? "PUT" : "POST";
+
+      await api<ApiCampaign>(endpoint, {
+        method,
         body: {
           name: campaignName.trim(),
           connection_id: selectedConnectionId,
@@ -407,7 +450,7 @@ const Campanhas = () => {
       });
 
       toast({
-        title: "Campanha criada com sucesso",
+        title: editingCampaignId ? "Campanha atualizada com sucesso" : "Campanha criada com sucesso",
       });
 
       setCampaignName("");
@@ -419,6 +462,7 @@ const Campanhas = () => {
       setStartTime("08:00");
       setEndTime("18:00");
       setPauseInterval("10");
+      setEditingCampaignId(null);
 
       const campaignsData = await api<ApiCampaign[]>("/api/campaigns");
       const mappedCampaigns = campaignsData.map((campaign) => {
@@ -439,6 +483,13 @@ const Campanhas = () => {
           totalContacts: total,
           sentMessages: sent,
           scheduledAt,
+          connectionId: campaign.connection_id,
+          listId: campaign.list_id,
+          messageId: campaign.message_id,
+          scheduledAtRaw: campaign.scheduled_at ?? null,
+          endAtRaw: campaign.end_at ?? null,
+          minDelay: campaign.min_delay ?? null,
+          maxDelay: campaign.max_delay ?? null,
         };
       });
 
@@ -446,7 +497,7 @@ const Campanhas = () => {
       setActiveTab("list");
     } catch (error) {
       toast({
-        title: "Erro ao criar campanha",
+        title: editingCampaignId ? "Erro ao atualizar campanha" : "Erro ao criar campanha",
         description:
           error instanceof Error ? error.message : "Tente novamente mais tarde",
         variant: "destructive",
@@ -454,6 +505,93 @@ const Campanhas = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleUpdateCampaignStatus = async (
+    campaignId: string,
+    status: ApiCampaign["status"]
+  ) => {
+    try {
+      const updated = await api<ApiCampaign>(`/api/campaigns/${campaignId}/status`, {
+        method: "PATCH",
+        body: { status },
+      });
+
+      setCampaigns((prev) =>
+        prev.map((campaign) =>
+          campaign.id === campaignId
+            ? {
+                ...campaign,
+                status: mapStatus(updated.status),
+              }
+            : campaign
+        )
+      );
+
+      toast({
+        title:
+          status === "paused"
+            ? "Campanha pausada com sucesso"
+            : status === "running"
+            ? "Campanha retomada com sucesso"
+            : "Campanha atualizada",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao atualizar campanha",
+        description:
+          error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteCampaign = async (campaignId: string) => {
+    try {
+      await api(`/api/campaigns/${campaignId}`, {
+        method: "DELETE",
+      });
+
+      setCampaigns((prev) => prev.filter((campaign) => campaign.id !== campaignId));
+
+      if (selectedCampaign === campaignId) {
+        setSelectedCampaign(null);
+        setActiveTab("list");
+      }
+
+      toast({
+        title: "Campanha removida com sucesso",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao remover campanha",
+        description:
+          error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditCampaign = (campaign: Campaign) => {
+    setEditingCampaignId(campaign.id);
+    setCampaignName(campaign.name);
+    setSelectedConnectionId(campaign.connectionId);
+    setSelectedListId(campaign.listId);
+    setSelectedMessageId(campaign.messageId);
+
+    if (campaign.scheduledAtRaw) {
+      const start = new Date(campaign.scheduledAtRaw);
+      setStartDate(start);
+      setStartTime(formatTimeForInput(start));
+    }
+
+    if (campaign.endAtRaw) {
+      const end = new Date(campaign.endAtRaw);
+      setEndDate(end);
+      setEndTime(formatTimeForInput(end));
+    }
+
+    setActiveTab("create");
   };
 
   const loadMonitor = async (campaignId: string) => {
@@ -614,17 +752,47 @@ const Campanhas = () => {
                             Monitorar
                           </Button>
                           {campaign.status === "running" && (
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleUpdateCampaignStatus(campaign.id, "paused")
+                              }
+                            >
                               <Pause className="h-4 w-4" />
                               Pausar
                             </Button>
                           )}
                           {campaign.status === "paused" && (
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleUpdateCampaignStatus(campaign.id, "running")
+                              }
+                            >
                               <Play className="h-4 w-4" />
                               Retomar
                             </Button>
                           )}
+                          {campaign.status === "scheduled" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditCampaign(campaign)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Editar
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteCampaign(campaign.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Apagar
+                          </Button>
                         </div>
                       </div>
                     </div>

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,31 +15,58 @@ import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 import Usuarios from "./pages/Usuarios";
 import Conexoes from "./pages/Conexoes";
+import { api } from "@/lib/api";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/contatos" element={<ProtectedRoute><Contatos /></ProtectedRoute>} />
-            <Route path="/mensagens" element={<ProtectedRoute><Mensagens /></ProtectedRoute>} />
-            <Route path="/campanhas" element={<ProtectedRoute><Campanhas /></ProtectedRoute>} />
-            <Route path="/conexoes" element={<ProtectedRoute><Conexoes /></ProtectedRoute>} />
-            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-            <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  useEffect(() => {
+    const applyBranding = async () => {
+      try {
+        const data = await api<{ logoUrl: string | null; faviconUrl: string | null }>(
+          "/api/auth/branding",
+          { auth: false }
+        );
+
+        if (data.faviconUrl && typeof document !== "undefined") {
+          let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+          if (!link) {
+            link = document.createElement("link");
+            link.rel = "icon";
+            document.head.appendChild(link);
+          }
+          link.href = data.faviconUrl;
+        }
+      } catch {
+      }
+    };
+
+    applyBranding();
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/contatos" element={<ProtectedRoute><Contatos /></ProtectedRoute>} />
+              <Route path="/mensagens" element={<ProtectedRoute><Mensagens /></ProtectedRoute>} />
+              <Route path="/campanhas" element={<ProtectedRoute><Campanhas /></ProtectedRoute>} />
+              <Route path="/conexoes" element={<ProtectedRoute><Conexoes /></ProtectedRoute>} />
+              <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+              <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
