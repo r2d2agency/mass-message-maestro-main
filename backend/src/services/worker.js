@@ -37,6 +37,12 @@ const resolveMediaForEvolution = (mediaUrl) => {
          console.log(`Checking local file: ${filePath}`);
 
          if (fs.existsSync(filePath)) {
+           const stats = fs.statSync(filePath);
+           if (stats.size === 0) {
+             console.warn(`Local file is empty: ${filePath}`);
+             return { error: 'Arquivo de mídia local está vazio (0 bytes).' };
+           }
+
            const buffer = fs.readFileSync(filePath);
            const ext = path.extname(filePath).toLowerCase();
 
@@ -51,7 +57,7 @@ const resolveMediaForEvolution = (mediaUrl) => {
            else if (ext === '.webp') mime = 'image/webp';
 
            const base64 = buffer.toString('base64');
-           console.log(`Resolved local file to base64 (${mime})`);
+           console.log(`Resolved local file to base64 (${mime}), size: ${stats.size} bytes`);
            return {
              media: `data:${mime};base64,${base64}`,
              mimetype: mime,
@@ -69,8 +75,11 @@ const resolveMediaForEvolution = (mediaUrl) => {
 
   // Fallback to URL only if we are sure it's not a broken local reference
   // But since we can't be 100% sure, we fall back.
-  // However, if the user is getting DNS errors for "self" references, it's better to fail if we suspect it's local.
-  // But let's stick to the improved detection above. If it contains /uploads/media/ it should have been caught.
+  // However, check if it is a valid URL at least.
+  if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
+    console.warn(`Invalid media URL format (not http/https and not local): ${mediaUrl}`);
+    return { error: 'URL de mídia inválida (não é http/https e arquivo local não encontrado).' };
+  }
   
   return { media: mediaUrl, mimetype: undefined, fileName: undefined };
 };
