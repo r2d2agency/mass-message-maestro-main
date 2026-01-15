@@ -10,78 +10,29 @@ const uploadsPath = path.join(__dirname, '..', '..', 'uploads');
 const resolveMediaForEvolution = (mediaUrl) => {
   if (!mediaUrl) return { media: null, mimetype: undefined, fileName: undefined };
 
-  try {
-    // Try to parse as URL first
-    let pathname = '';
-    try {
-      const url = new URL(mediaUrl);
-      pathname = decodeURIComponent(url.pathname);
-    } catch (e) {
-      // If invalid URL, assume it might be a relative path if it contains uploads
-      pathname = decodeURIComponent(mediaUrl);
-    }
+  // Log para depuração
+  console.log(`Resolving media for Evolution: ${mediaUrl}`);
 
-    console.log(`Resolving media: ${mediaUrl} -> Pathname: ${pathname}`);
-
-    // Check if it looks like a local upload
-    // Matches /api/uploads/..., /uploads/..., or even just contains /uploads/media/
-    if (pathname.includes('/uploads/media/')) {
-       // Extract the part after /uploads/
-       // E.g. /api/uploads/media/file.jpg -> media/file.jpg
-       // E.g. /uploads/media/file.jpg -> media/file.jpg
-       const parts = pathname.split('/uploads/');
-       if (parts.length > 1) {
-         const relativePath = parts[1]; // media/file.jpg
-         const filePath = path.join(uploadsPath, relativePath);
-
-         console.log(`Checking local file: ${filePath}`);
-
-         if (fs.existsSync(filePath)) {
-           const stats = fs.statSync(filePath);
-           if (stats.size === 0) {
-             console.warn(`Local file is empty: ${filePath}`);
-             return { error: 'Arquivo de mídia local está vazio (0 bytes).' };
-           }
-
-           const buffer = fs.readFileSync(filePath);
-           const ext = path.extname(filePath).toLowerCase();
-
-           let mime = 'application/octet-stream';
-           if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
-           else if (ext === '.png') mime = 'image/png';
-           else if (ext === '.gif') mime = 'image/gif';
-           else if (ext === '.mp4') mime = 'video/mp4';
-           else if (ext === '.mov') mime = 'video/quicktime';
-           else if (ext === '.mp3') mime = 'audio/mpeg';
-           else if (ext === '.ogg') mime = 'audio/ogg';
-           else if (ext === '.webp') mime = 'image/webp';
-
-           const base64 = buffer.toString('base64');
-           console.log(`Resolved local file to base64 (${mime}), size: ${stats.size} bytes`);
-           return {
-             media: `data:${mime};base64,${base64}`,
-             mimetype: mime,
-             fileName: path.basename(filePath),
-           };
-         } else {
-           console.warn(`Local file not found: ${filePath}`);
-           return { error: 'Arquivo de mídia não encontrado no servidor (upload perdido?). Por favor, faça o upload da imagem novamente.' };
-         }
-       }
-    }
-  } catch (err) {
-    console.error('Error resolving media:', err);
+  // Se já for uma URL completa (http/https), enviamos direto (igual ao teste de conexão)
+  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+    return { media: mediaUrl };
   }
 
-  // Fallback to URL only if we are sure it's not a broken local reference
-  // But since we can't be 100% sure, we fall back.
-  // However, check if it is a valid URL at least.
-  if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
-    console.warn(`Invalid media URL format (not http/https and not local): ${mediaUrl}`);
-    return { error: 'URL de mídia inválida (não é http/https e arquivo local não encontrado).' };
+  // Se for um caminho relativo que começa com /api/uploads, tentamos construir a URL completa
+  // Isso é um fallback caso o banco tenha salvo apenas o caminho relativo
+  if (mediaUrl.startsWith('/api/uploads/')) {
+     // Tenta usar PUBLIC_URL do .env
+     if (process.env.PUBLIC_URL) {
+        const baseUrl = process.env.PUBLIC_URL.replace(/\/$/, '');
+        const fullUrl = `${baseUrl}${mediaUrl}`;
+        console.log(`Converted relative path to full URL: ${fullUrl}`);
+        return { media: fullUrl };
+     }
   }
-  
-  return { media: mediaUrl, mimetype: undefined, fileName: undefined };
+
+  // Se não for URL válida, avisamos
+  console.warn(`Media URL format not recognized as absolute URL: ${mediaUrl}`);
+  return { media: mediaUrl }; // Tenta enviar assim mesmo, mas provavelmente falhará se não for URL
 };
 
 const buildMessagesFromTemplate = (items, contactName) => {
