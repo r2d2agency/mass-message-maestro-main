@@ -173,9 +173,20 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
         continue;
       }
 
+      const getMediaTypeFromMime = (mime) => {
+        if (!mime) return null;
+        if (mime.startsWith('image/')) return 'image';
+        if (mime.startsWith('video/')) return 'video';
+        if (mime.startsWith('audio/')) return 'audio';
+        return null;
+      };
+
+      const detectedType = mediaData.mimetype ? getMediaTypeFromMime(mediaData.mimetype) : null;
+      const finalMediaType = detectedType || msg.kind;
+
       const body = {
         number: phone,
-        mediatype: msg.kind,
+        mediatype: finalMediaType,
         caption: msg.caption || undefined,
         media: mediaData.media,
       };
@@ -186,6 +197,13 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
 
       if (mediaData.fileName) {
         body.fileName = mediaData.fileName;
+      }
+
+      console.log(`Payload prepared for ${phone}. MediaType: ${body.mediatype}, MimeType: ${body.mimetype}, Media Length: ${body.media ? body.media.length : 0}`);
+      
+      // Validação de segurança antes de enviar
+      if (!body.media || body.media.length < 10) {
+         throw new Error(`Mídia inválida ou vazia gerada para ${phone}`);
       }
 
       const response = await fetch(`${apiUrl}/message/sendMedia/${instanceName}`, {
