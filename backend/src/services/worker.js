@@ -1,4 +1,66 @@
 import { query } from '../db.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads', 'media');
+
+const getMediaContent = (url) => {
+  try {
+    if (!url || !url.startsWith('http')) return url;
+
+    // Tenta extrair o nome do arquivo da URL se ela parecer vir do nosso servidor
+    // Mesmo que a URL seja localhost ou IP público, verificamos se o arquivo existe na pasta de uploads pelo nome
+    const urlObj = new URL(url);
+    const filename = path.basename(urlObj.pathname);
+    
+    // Evita path traversal básico
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        return url;
+    }
+
+    const localPath = path.join(UPLOADS_DIR, filename);
+
+    if (fs.existsSync(localPath)) {
+      console.log(`Found local file for ${url}: ${localPath}. Converting to base64...`);
+      const fileBuffer = fs.readFileSync(localPath);
+      const base64 = fileBuffer.toString('base64');
+      
+      const ext = path.extname(localPath).toLowerCase().replace('.', '');
+      let mime = 'application/octet-stream';
+      
+      // Mime types comuns
+      const mimeTypes = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'mp4': 'video/mp4',
+        'mp3': 'audio/mpeg',
+        'ogg': 'audio/ogg',
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'txt': 'text/plain'
+      };
+
+      if (mimeTypes[ext]) {
+        mime = mimeTypes[ext];
+      }
+
+      // Retorna Data URI
+      return `data:${mime};base64,${base64}`;
+    }
+  } catch (e) {
+    console.warn(`Could not resolve local file for ${url}, using original URL. Error: ${e.message}`);
+  }
+  return url;
+};
 
 const buildMessagesFromTemplate = (items, contactName) => {
   if (!items || !Array.isArray(items)) return [];
@@ -79,6 +141,12 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
 
       console.log(`Sending media to ${phone}: ${msg.mediaUrl} (Type: ${msg.kind})`);
 
+      // Resolve media content (Base64 if local file found, otherwise URL)
+      const mediaContent = getMediaContent(msg.mediaUrl);
+      if (mediaContent !== msg.mediaUrl) {
+          console.log(`Converted media URL to Base64 (length: ${mediaContent.length})`);
+      }
+
       const response = await fetch(`${apiUrl}/message/sendMedia/${instanceName}`, {
         method: 'POST',
         headers: {
@@ -89,7 +157,7 @@ const sendMessagesViaEvolution = async (connection, phone, messageItems, contact
           number: phone,
           mediatype: msg.kind,
           caption: msg.caption || undefined,
-          media: msg.mediaUrl,
+          media: mediaContent,
         }),
       });
 
