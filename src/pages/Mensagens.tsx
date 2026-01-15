@@ -49,6 +49,7 @@ const Mensagens = () => {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -130,28 +131,50 @@ const Mensagens = () => {
 
     try {
       setIsSaving(true);
-      const created = await api<ApiMessage>("/api/messages", {
-        method: "POST",
-        body: {
-          name: messageName.trim(),
-          items: messageItems,
-        },
-      });
+      let saved: ApiMessage;
+
+      if (editingMessageId) {
+        saved = await api<ApiMessage>(`/api/messages/${editingMessageId}`, {
+          method: "PATCH",
+          body: {
+            name: messageName.trim(),
+            items: messageItems,
+          },
+        });
+      } else {
+        saved = await api<ApiMessage>("/api/messages", {
+          method: "POST",
+          body: {
+            name: messageName.trim(),
+            items: messageItems,
+          },
+        });
+      }
 
       const mapped: SavedMessage = {
-        id: created.id,
-        name: created.name,
-        items: created.items,
-        createdAt: new Date(created.created_at).toLocaleDateString("pt-BR"),
+        id: saved.id,
+        name: saved.name,
+        items: saved.items,
+        createdAt: new Date(saved.created_at).toLocaleDateString("pt-BR"),
       };
 
-      setSavedMessages((prev) => [mapped, ...prev]);
+      if (editingMessageId) {
+        setSavedMessages((prev) =>
+          prev.map((m) => (m.id === mapped.id ? mapped : m))
+        );
+      } else {
+        setSavedMessages((prev) => [mapped, ...prev]);
+      }
+
       setMessageName("");
       setMessageItems([{ id: crypto.randomUUID(), type: "text", content: "" }]);
+      setEditingMessageId(null);
       setActiveTab("list");
 
       toast({
-        title: "Mensagem salva com sucesso",
+        title: editingMessageId
+          ? "Mensagem atualizada com sucesso"
+          : "Mensagem salva com sucesso",
       });
     } catch (error) {
       toast({
@@ -191,6 +214,18 @@ const Mensagens = () => {
     setDraggingIndex(null);
   };
 
+  const handleEditMessage = (message: SavedMessage) => {
+    setEditingMessageId(message.id);
+    setMessageName(message.name);
+    setMessageItems(
+      message.items.map((item) => ({
+        ...item,
+        id: item.id || crypto.randomUUID(),
+      }))
+    );
+    setActiveTab("create");
+  };
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -202,7 +237,17 @@ const Mensagens = () => {
               Crie e gerencie seus templates de mensagem
             </p>
           </div>
-          <Button variant="gradient" onClick={() => setActiveTab("create")}>
+          <Button
+            variant="gradient"
+            onClick={() => {
+              setActiveTab("create");
+              setEditingMessageId(null);
+              setMessageName("");
+              setMessageItems([
+                { id: crypto.randomUUID(), type: "text", content: "" },
+              ]);
+            }}
+          >
             <Plus className="h-4 w-4" />
             Nova Mensagem
           </Button>
@@ -275,7 +320,12 @@ const Mensagens = () => {
                           : message.items[0]?.caption || "Mídia sem legenda"}
                       </p>
                       <div className="mt-4 flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleEditMessage(message)}
+                        >
                           <Edit className="h-3 w-3" />
                           Editar
                         </Button>

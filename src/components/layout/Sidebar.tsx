@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -25,11 +26,26 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
+
+  const brazilTime = now.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-card border-r border-border shadow-card">
@@ -95,7 +111,7 @@ export function Sidebar() {
             <Zap className="h-4 w-4" />
           </Button>
           <p className="text-xs text-muted-foreground">
-            Versão 1.0.3 • Blaster
+            Versão 1.0.3 • TNS R2D2 • Horário Brasília: {brazilTime}
           </p>
         </div>
       </div>
