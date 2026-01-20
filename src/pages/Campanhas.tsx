@@ -381,36 +381,11 @@ const Campanhas = () => {
       return;
     }
 
-    const totalSeconds =
-      (endDateTime.getTime() - startDateTime.getTime()) / 1000;
+    let min_delay = parseInt(minDelayInput, 10);
+    let max_delay = parseInt(maxDelayInput, 10);
 
-    const pauseCount =
-      contactCount > 1 ? Math.floor((contactCount - 1) / 20) : 0;
-    const pauseTotalSeconds = pauseCount * 600;
-    const effectiveSeconds = totalSeconds - pauseTotalSeconds;
-
-    if (effectiveSeconds <= contactCount * 10 || effectiveSeconds <= 0) {
-      toast({
-        title: "Período muito curto",
-        description:
-          "Amplie o intervalo entre início e fim ou use uma lista com menos contatos.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const avgInterval = effectiveSeconds / contactCount;
-    let min_delay = Math.max(Math.floor(avgInterval * 0.6), 10);
-    let max_delay = Math.max(Math.floor(avgInterval * 1.4), min_delay + 5);
-
-    const pauseMinutesNumber = Number.parseInt(pauseInterval, 10);
-    if (!Number.isNaN(pauseMinutesNumber) && pauseMinutesNumber > 0) {
-      const maxFromInput = pauseMinutesNumber * 60;
-      max_delay = maxFromInput;
-      if (min_delay > max_delay) {
-        min_delay = Math.max(10, Math.floor(max_delay * 0.6));
-      }
-    }
+    if (isNaN(min_delay) || min_delay < 1) min_delay = 10;
+    if (isNaN(max_delay) || max_delay < 1) max_delay = 30;
 
     if (appSettings?.minPauseSeconds && appSettings.minPauseSeconds > 0) {
       min_delay = Math.max(min_delay, appSettings.minPauseSeconds);
@@ -462,7 +437,8 @@ const Campanhas = () => {
       setEndDate(undefined);
       setStartTime("08:00");
       setEndTime("18:00");
-      setPauseInterval("10");
+      setMinDelayInput("30");
+      setMaxDelayInput("120");
       setEditingCampaignId(null);
 
       const campaignsData = await api<ApiCampaign[]>("/api/campaigns");
