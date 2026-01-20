@@ -384,8 +384,8 @@ const Campanhas = () => {
     let min_delay = parseInt(minDelayInput, 10);
     let max_delay = parseInt(maxDelayInput, 10);
 
-    if (isNaN(min_delay) || min_delay < 1) min_delay = 10;
-    if (isNaN(max_delay) || max_delay < 1) max_delay = 30;
+    if (isNaN(min_delay) || min_delay < 1) min_delay = 1;
+    if (isNaN(max_delay) || max_delay < 1) max_delay = 5;
 
     if (appSettings?.minPauseSeconds && appSettings.minPauseSeconds > 0) {
       min_delay = Math.max(min_delay, appSettings.minPauseSeconds);
@@ -396,7 +396,7 @@ const Campanhas = () => {
     }
 
     if (max_delay <= min_delay) {
-      max_delay = min_delay + 5;
+      max_delay = min_delay + 1;
     }
 
     let scheduled_at: string | null = null;

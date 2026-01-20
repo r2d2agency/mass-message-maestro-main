@@ -9,6 +9,40 @@ const shuffleArray = (array) => {
   return array;
 };
 
+const adjustToBusinessHours = (date) => {
+  const d = new Date(date);
+  const hours = d.getHours();
+  
+  // Se for antes das 08:00, ajusta para 08:00 do mesmo dia
+  if (hours < 8) {
+    d.setHours(8, 0, 0, 0);
+  }
+  // Se for depois das 18:00, ajusta para 08:00 do dia seguinte
+  else if (hours >= 18) {
+    d.setDate(d.getDate() + 1);
+    d.setHours(8, 0, 0, 0);
+  }
+  
+  return d;
+};
+
+async function insertBatch(batch) {
+  if (batch.length === 0) return;
+  
+  const params = [];
+  const values = [];
+  let paramIndex = 1;
+  
+  for (const item of batch) {
+      values.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4})`);
+      params.push(item.campaign_id, item.contact_id, item.phone, item.status, item.scheduled_for);
+      paramIndex += 5;
+  }
+  
+  const queryStr = `INSERT INTO campaign_messages (campaign_id, contact_id, phone, status, scheduled_for) VALUES ${values.join(',')}`;
+  await query(queryStr, params);
+}
+
 /**
  * Schedules messages for a campaign
  * @param {string} campaignId 
@@ -37,97 +71,68 @@ export const scheduleCampaign = async (campaignId) => {
     // 3. Scheduling Logic
     // Start from scheduled_at OR now
     let startTime = campaign.scheduled_at ? new Date(campaign.scheduled_at) : new Date();
-    // If scheduled_at is in the past, start now (unless strictly historical, but usually we want to send now)
+    // If scheduled_at is in the past, start now
     if (startTime < new Date()) startTime = new Date();
 
     let nextTime = new Date(startTime);
     
-    // Default delays (seconds) based on campaign configuration
-    let minDelay = campaign.min_delay || 90;
-    let maxDelay = campaign.max_delay || 300;
+    // Use delays from campaign (defaulting if missing, though UI enforces them)
+    // Removed 10s minimum lock as requested
+    let minDelay = campaign.min_delay || 30;
+    let maxDelay = campaign.max_delay || 120;
+
+    // Ensure logic consistency
+    if (minDelay < 1) minDelay = 1;
+    if (maxDelay <= minDelay) maxDelay = minDelay + 1;
 
     const batchSize = 20;
     const pauseSeconds = 600; // 10 minutes
 
-    // If end_at is provided and delays were not explicitly customized,
-    // calculate dynamic delays to fit in the window
-    if (campaign.end_at && (!campaign.min_delay || !campaign.max_delay)) {
-      const endTime = new Date(campaign.end_at);
-      const totalDurationSeconds = (endTime.getTime() - startTime.getTime()) / 1000;
-
-      // Calculate total pause time required
-      const totalBatches = Math.ceil(contacts.length / batchSize);
-      const totalPauseTime = (totalBatches - 1) * pauseSeconds; // No pause after last batch
-
-      // Available time for message gaps
-      const availableTimeForMessages = totalDurationSeconds - totalPauseTime;
-
-      if (availableTimeForMessages > 0) {
-        // Average delay per message (we have N messages, so N gaps roughly? actually N messages usually mean N delays if we count from 0)
-        // Let's assume delay comes BEFORE each message or AFTER? 
-        // Current logic: nextTime += delay. So delay is between previous and current.
-        // For 1st message, delay is from start? Or start immediately?
-        // Usually 1st message goes immediately or after small delay. 
-        // Let's assume delay is added for each message.
-        
-        const avgDelay = availableTimeForMessages / contacts.length;
-        
-        // Ensure at least 10s safe buffer
-        const safeAvg = Math.max(avgDelay, 10);
-        
-        // Create a variation window around average
-        // e.g. Avg=60s. Min=30s, Max=90s.
-        minDelay = Math.floor(safeAvg * 0.5);
-        maxDelay = Math.ceil(safeAvg * 1.5);
-        
-        // Enforce safety floor
-        minDelay = Math.max(minDelay, 10);
-        maxDelay = Math.max(maxDelay, minDelay + 5);
-
-        console.log(`Auto-calculated delays for window: Min=${minDelay}s, Max=${maxDelay}s, Avg=${safeAvg}s`);
-      } else {
-        console.warn('Campaign window too short for required pauses! Using default delays.');
-      }
-    }
-
-    const safeMinDelay = Math.max(minDelay, 10);
-    const safeMaxDelay = Math.max(maxDelay, safeMinDelay + 5);
-    
     let messagesInBatch = 0;
 
     console.log(
-      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${safeMinDelay}-${safeMaxDelay}s and 10min pause every ${batchSize} messages (Business Hours 08-18h)`
+      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${minDelay}-${maxDelay}s and 10min pause every ${batchSize} messages (Business Hours 08-18h)`
     );
+
+    const INSERT_BATCH_SIZE = 500;
+    let currentBatch = [];
 
     for (const contact of contacts) {
       // Add random delay BEFORE sending
       const delay =
         Math.floor(
-          Math.random() * (safeMaxDelay - safeMinDelay + 1)
-        ) + safeMinDelay;
+          Math.random() * (maxDelay - minDelay + 1)
+        ) + minDelay;
 
       nextTime = new Date(nextTime.getTime() + delay * 1000);
       nextTime = adjustToBusinessHours(nextTime);
 
       messagesInBatch += 1;
       
-      // Check batch limit
+      // Check batch limit for pauses
       if (messagesInBatch >= batchSize) {
         // Add pause
         nextTime = new Date(nextTime.getTime() + pauseSeconds * 1000);
         nextTime = adjustToBusinessHours(nextTime);
         messagesInBatch = 0;
-        console.log(
-          `Adding 10min pause at ${nextTime.toISOString()} after ${batchSize} messages`
-        );
       }
 
-      await query(
-        `INSERT INTO campaign_messages 
-         (campaign_id, contact_id, phone, status, scheduled_for)
-         VALUES ($1, $2, $3, 'pending', $4)`,
-        [campaignId, contact.id, contact.phone, nextTime]
-      );
+      currentBatch.push({
+          campaign_id: campaignId,
+          contact_id: contact.id,
+          phone: contact.phone,
+          status: 'pending',
+          scheduled_for: nextTime
+      });
+
+      if (currentBatch.length >= INSERT_BATCH_SIZE) {
+          await insertBatch(currentBatch);
+          currentBatch = [];
+      }
+    }
+
+    if (currentBatch.length > 0) {
+        await insertBatch(currentBatch);
     }
 
     console.log(`Campaign ${campaignId} scheduled successfully. Last message at ${nextTime.toISOString()}`);
