@@ -67,7 +67,7 @@ export function Sidebar() {
   });
 
   return (
-    <aside className="bg-card border-b border-border shadow-card lg:fixed lg:left-0 lg:top-0 lg:z-40 lg:h-screen lg:w-64 lg:border-r">
+    <aside className="bg-card border-b border-border shadow-card lg:fixed lg:left-0 lg:top-0 lg:z-40 lg:h-screen lg:w-56 lg:border-r">
       <div className="flex flex-col lg:h-full">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 px-6 border-b border-border">
@@ -113,7 +113,7 @@ export function Sidebar() {
             <Link
               to="/usuarios"
               className={cn(
-                "mt-4 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                "mt-4 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                 location.pathname === "/usuarios"
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -121,7 +121,7 @@ export function Sidebar() {
             >
               <Shield
                 className={cn(
-                  "h-5 w-5",
+                  "h-4 w-4",
                   location.pathname === "/usuarios" && "text-primary"
                 )}
               />

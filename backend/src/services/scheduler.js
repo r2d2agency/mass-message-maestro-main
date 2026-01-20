@@ -96,17 +96,18 @@ export const scheduleCampaign = async (campaignId) => {
     let messagesInBatch = 0;
 
     console.log(
-      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${safeMinDelay}-${safeMaxDelay}s and 10min pause every ${batchSize} messages`
+      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${safeMinDelay}-${safeMaxDelay}s and 10min pause every ${batchSize} messages (Business Hours 08-18h)`
     );
 
     for (const contact of contacts) {
-      // Add random delay BEFORE sending (or adding to the timeline)
+      // Add random delay BEFORE sending
       const delay =
         Math.floor(
           Math.random() * (safeMaxDelay - safeMinDelay + 1)
         ) + safeMinDelay;
 
       nextTime = new Date(nextTime.getTime() + delay * 1000);
+      nextTime = adjustToBusinessHours(nextTime);
 
       messagesInBatch += 1;
       
@@ -114,6 +115,7 @@ export const scheduleCampaign = async (campaignId) => {
       if (messagesInBatch >= batchSize) {
         // Add pause
         nextTime = new Date(nextTime.getTime() + pauseSeconds * 1000);
+        nextTime = adjustToBusinessHours(nextTime);
         messagesInBatch = 0;
         console.log(
           `Adding 10min pause at ${nextTime.toISOString()} after ${batchSize} messages`

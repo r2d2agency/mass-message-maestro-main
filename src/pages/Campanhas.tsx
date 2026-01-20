@@ -186,7 +186,8 @@ const Campanhas = () => {
   const [endDate, setEndDate] = useState<Date>();
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
-  const [pauseInterval, setPauseInterval] = useState("10");
+  const [minDelayInput, setMinDelayInput] = useState("30");
+  const [maxDelayInput, setMaxDelayInput] = useState("120");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
   const [connections, setConnections] = useState<ApiConnection[]>([]);
@@ -1002,20 +1003,26 @@ const Campanhas = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="pauseInterval">Pausa Aleatória (minutos)</Label>
-                    <div className="flex items-center gap-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="minDelay">Delay Mínimo (segundos)</Label>
                       <Input
-                        id="pauseInterval"
+                        id="minDelay"
                         type="number"
                         min="1"
-                        max="60"
-                        value={pauseInterval}
-                        onChange={(e) => setPauseInterval(e.target.value)}
+                        value={minDelayInput}
+                        onChange={(e) => setMinDelayInput(e.target.value)}
                       />
-                      <span className="text-sm text-muted-foreground whitespace-nowrap">
-                        min entre mensagens
-                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="maxDelay">Delay Máximo (segundos)</Label>
+                      <Input
+                        id="maxDelay"
+                        type="number"
+                        min="1"
+                        value={maxDelayInput}
+                        onChange={(e) => setMaxDelayInput(e.target.value)}
+                      />
                     </div>
                   </div>
 
@@ -1027,9 +1034,8 @@ const Campanhas = () => {
                           Envio Aleatório Ativo
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          As mensagens serão enviadas em horários aleatórios entre{" "}
-                          {startTime} e {endTime}, com pausas de até {pauseInterval}{" "}
-                          minutos entre cada envio para proteger sua conta.
+                          As mensagens serão enviadas respeitando o horário das {startTime} às {endTime}, 
+                          com intervalo aleatório entre {minDelayInput} e {maxDelayInput} segundos.
                         </p>
                       </div>
                     </div>
