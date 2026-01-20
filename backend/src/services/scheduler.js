@@ -11,16 +11,31 @@ const shuffleArray = (array) => {
 
 const adjustToBusinessHours = (date) => {
   const d = new Date(date);
-  const hours = d.getHours();
   
-  // Se for antes das 08:00, ajusta para 08:00 do mesmo dia
+  // Converter para horário do Brasil (UTC-3) para verificação
+  // Subtraímos 3 horas do tempo UTC para obter a "hora visual" do Brasil
+  const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  const hours = brDate.getUTCHours();
+  
+  // Se for antes das 08:00 BRT
   if (hours < 8) {
-    d.setHours(8, 0, 0, 0);
+    // Ajusta para 08:00 BRT do mesmo dia (11:00 UTC)
+    // Mantemos o ano/mês/dia do Brasil (brDate) para evitar problemas na virada do dia UTC
+    d.setUTCFullYear(brDate.getUTCFullYear());
+    d.setUTCMonth(brDate.getUTCMonth());
+    d.setUTCDate(brDate.getUTCDate());
+    d.setUTCHours(11, 0, 0, 0); // 11h UTC = 08h BRT
   }
-  // Se for depois das 18:00, ajusta para 08:00 do dia seguinte
+  // Se for depois das 18:00 BRT
   else if (hours >= 18) {
-    d.setDate(d.getDate() + 1);
-    d.setHours(8, 0, 0, 0);
+    // Ajusta para 08:00 BRT do dia seguinte (11:00 UTC)
+    const tomorrow = new Date(brDate);
+    tomorrow.setUTCDate(brDate.getUTCDate() + 1);
+    
+    d.setUTCFullYear(tomorrow.getUTCFullYear());
+    d.setUTCMonth(tomorrow.getUTCMonth());
+    d.setUTCDate(tomorrow.getUTCDate());
+    d.setUTCHours(11, 0, 0, 0); // 11h UTC = 08h BRT
   }
   
   return d;
