@@ -9,7 +9,11 @@ const shuffleArray = (array) => {
   return array;
 };
 
-const adjustToBusinessHours = (date) => {
+const adjustToBusinessHours = (date, startHourStr, endHourStr) => {
+  // Parse user settings or use defaults
+  const startHour = startHourStr ? parseInt(startHourStr.split(':')[0]) : 8;
+  const endHour = endHourStr ? parseInt(endHourStr.split(':')[0]) : 18;
+
   const d = new Date(date);
   
   // Converter para horário do Brasil (UTC-3) para verificação
@@ -17,25 +21,27 @@ const adjustToBusinessHours = (date) => {
   const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
   const hours = brDate.getUTCHours();
   
-  // Se for antes das 08:00 BRT
-  if (hours < 8) {
-    // Ajusta para 08:00 BRT do mesmo dia (11:00 UTC)
+  // Se for antes do horário de início BRT
+  if (hours < startHour) {
+    // Ajusta para o horário de início BRT do mesmo dia
     // Mantemos o ano/mês/dia do Brasil (brDate) para evitar problemas na virada do dia UTC
     d.setUTCFullYear(brDate.getUTCFullYear());
     d.setUTCMonth(brDate.getUTCMonth());
     d.setUTCDate(brDate.getUTCDate());
-    d.setUTCHours(11, 0, 0, 0); // 11h UTC = 08h BRT
+    // Convert BRT start hour to UTC (add 3 hours)
+    d.setUTCHours(startHour + 3, 0, 0, 0); 
   }
-  // Se for depois das 18:00 BRT
-  else if (hours >= 18) {
-    // Ajusta para 08:00 BRT do dia seguinte (11:00 UTC)
+  // Se for depois do horário de fim BRT
+  else if (hours >= endHour) {
+    // Ajusta para o horário de início BRT do dia seguinte
     const tomorrow = new Date(brDate);
     tomorrow.setUTCDate(brDate.getUTCDate() + 1);
     
     d.setUTCFullYear(tomorrow.getUTCFullYear());
     d.setUTCMonth(tomorrow.getUTCMonth());
     d.setUTCDate(tomorrow.getUTCDate());
-    d.setUTCHours(11, 0, 0, 0); // 11h UTC = 08h BRT
+    // Convert BRT start hour to UTC (add 3 hours)
+    d.setUTCHours(startHour + 3, 0, 0, 0);
   }
   
   return d;
@@ -66,10 +72,20 @@ export const scheduleCampaign = async (campaignId) => {
   try {
     console.log(`Scheduling campaign ${campaignId}...`);
 
-    // 1. Get campaign details
-    const campaignRes = await query('SELECT * FROM campaigns WHERE id = $1', [campaignId]);
+    // 1. Get campaign details with user settings
+    const campaignRes = await query(`
+      SELECT c.*, u.start_work_hour, u.end_work_hour 
+      FROM campaigns c 
+      JOIN users u ON c.user_id = u.id 
+      WHERE c.id = $1
+    `, [campaignId]);
+    
     if (campaignRes.rows.length === 0) throw new Error('Campaign not found');
     const campaign = campaignRes.rows[0];
+
+    // User settings for business hours
+    const { start_work_hour, end_work_hour } = campaign;
+    console.log(`Using business hours: ${start_work_hour || '08:00'} - ${end_work_hour || '18:00'} for campaign ${campaignId}`);
 
     // 2. Get contacts
     const contactsRes = await query('SELECT * FROM contacts WHERE list_id = $1', [campaign.list_id]);

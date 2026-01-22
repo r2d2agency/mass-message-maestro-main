@@ -46,11 +46,34 @@ async function ensureSuperAdmin() {
   }
 }
 
+async function ensureSchemaUpdates() {
+  try {
+    const checkCol = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='start_work_hour'
+    `);
+    
+    if (checkCol.rows.length === 0) {
+      console.log('Applying schema updates for user working hours...');
+      await query(`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS start_work_hour VARCHAR(5) DEFAULT '08:00',
+        ADD COLUMN IF NOT EXISTS end_work_hour VARCHAR(5) DEFAULT '18:00'
+      `);
+      console.log('Schema updates applied successfully.');
+    }
+  } catch (error) {
+    console.error('Error applying schema updates:', error);
+  }
+}
+
 // Test DB connection on startup
 testConnection().then(async connected => {
   if (!connected) {
     console.error('CRITICAL: Could not connect to database. Server may not function correctly.');
   } else {
+    await ensureSchemaUpdates();
     await ensureSuperAdmin();
     startWorker();
   }

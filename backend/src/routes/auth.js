@@ -118,7 +118,7 @@ router.get('/me', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const result = await query(
-      'SELECT id, email, name, status, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, status, created_at, start_work_hour, end_work_hour FROM users WHERE id = $1',
       [decoded.userId]
     );
 
@@ -146,6 +146,40 @@ router.get('/me', async (req, res) => {
     res.json({ user: { ...user, role } });
   } catch (error) {
     res.status(401).json({ error: 'Token inválido' });
+  }
+});
+
+// Update current user settings
+router.patch('/me/settings', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Não autenticado' });
+  }
+
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { start_work_hour, end_work_hour } = req.body;
+
+    const result = await query(
+      `UPDATE users 
+       SET start_work_hour = COALESCE($1, start_work_hour),
+           end_work_hour = COALESCE($2, end_work_hour),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, email, name, start_work_hour, end_work_hour`,
+      [start_work_hour, end_work_hour, decoded.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Update settings error:', error);
+    res.status(500).json({ error: 'Erro ao atualizar configurações' });
   }
 });
 

@@ -5,10 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Settings, Shield, Bell, Save, Image as ImageIcon } from "lucide-react";
+import { Settings, Shield, Bell, Save, Image as ImageIcon, Clock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, uploadFile } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const SETTINGS_STORAGE_KEY = "app_settings";
 
@@ -34,11 +41,20 @@ const Configuracoes = () => {
   const [dailyLimit, setDailyLimit] = useState("");
   const [minPause, setMinPause] = useState("");
   const [maxPause, setMaxPause] = useState("");
+  const [startWorkHour, setStartWorkHour] = useState("08:00");
+  const [endWorkHour, setEndWorkHour] = useState("18:00");
   const [logoUrl, setLogoUrl] = useState("");
   const [faviconUrl, setFaviconUrl] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [faviconFile, setFaviconFile] = useState<File | null>(null);
   const [isSavingBranding, setIsSavingBranding] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      if (user.start_work_hour) setStartWorkHour(user.start_work_hour);
+      if (user.end_work_hour) setEndWorkHour(user.end_work_hour);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -104,7 +120,7 @@ const Configuracoes = () => {
     loadBranding();
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (typeof window === "undefined") return;
 
     const toNumberOrNull = (value: string) => {
@@ -126,6 +142,17 @@ const Configuracoes = () => {
     };
 
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+
+    try {
+      await api.patch('/auth/me/settings', {
+        start_work_hour: startWorkHour,
+        end_work_hour: endWorkHour
+      });
+      toast({ title: "Configurações salvas com sucesso!" });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Erro ao salvar configurações de horário", variant: "destructive" });
+    }
   };
 
   const handleLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -312,6 +339,62 @@ const Configuracoes = () => {
                   onCheckedChange={setNotifyConnectionLost}
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Working Hours */}
+          <Card className="animate-fade-in shadow-card lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                Horário de Envios
+              </CardTitle>
+              <CardDescription>
+                Defina o intervalo de horário para envio de mensagens
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Início (Horas)</Label>
+                  <Select value={startWorkHour} onValueChange={setStartWorkHour}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }).map((_, i) => {
+                        const h = i.toString().padStart(2, "0");
+                        return (
+                          <SelectItem key={h} value={`${h}:00`}>
+                            {h}:00
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Fim (Horas)</Label>
+                  <Select value={endWorkHour} onValueChange={setEndWorkHour}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }).map((_, i) => {
+                        const h = i.toString().padStart(2, "0");
+                        return (
+                          <SelectItem key={h} value={`${h}:00`}>
+                            {h}:00
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Mensagens agendadas fora deste horário serão movidas automaticamente para o próximo dia útil.
+              </p>
             </CardContent>
           </Card>
 

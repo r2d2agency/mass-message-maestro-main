@@ -7,6 +7,8 @@ interface User {
   email: string;
   name: string;
   role: "admin" | "manager" | "user";
+  start_work_hour?: string;
+  end_work_hour?: string;
 }
 
 interface AuthContextType {

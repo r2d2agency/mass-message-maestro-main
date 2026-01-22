@@ -70,27 +70,27 @@ export function Sidebar() {
     <aside className="bg-card border-b border-border shadow-card lg:fixed lg:left-0 lg:top-0 lg:z-40 lg:h-screen lg:w-56 lg:border-r">
       <div className="flex flex-col lg:h-full">
         {/* Logo */}
-        <div className="flex h-16 items-center gap-3 px-6 border-b border-border">
+        <div className="flex h-14 items-center gap-3 px-4 border-b border-border">
           {brandingLogoUrl ? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background">
               <img
                 src={brandingLogoUrl}
                 alt="Logo"
-                className="h-9 w-9 object-contain"
+                className="h-6 w-6 object-contain"
               />
             </div>
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary">
-              <Zap className="h-5 w-5 text-primary-foreground" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
+              <Zap className="h-4 w-4 text-primary-foreground" />
             </div>
           )}
           <div>
-            <h1 className="text-lg font-bold text-foreground">Blaster</h1>
-            <p className="text-xs text-muted-foreground">Disparo em Massa</p>
+            <h1 className="text-base font-bold text-foreground">Blaster</h1>
+            <p className="text-[10px] text-muted-foreground">Disparo em Massa</p>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-3 lg:py-4">
+        <nav className="flex-1 space-y-1 px-2 py-2 lg:py-3">
           {navigation.map((item) => {
             const isActive = location.pathname === item.href;
             return (
@@ -98,13 +98,13 @@ export function Sidebar() {
                 key={item.name}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                   isActive
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <item.icon className={cn("h-5 w-5", isActive && "text-primary")} />
+                <item.icon className={cn("h-4 w-4", isActive && "text-primary")} />
                 {item.name}
               </Link>
             );
@@ -113,7 +113,7 @@ export function Sidebar() {
             <Link
               to="/usuarios"
               className={cn(
-                "mt-4 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                "mt-2 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                 location.pathname === "/usuarios"
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -130,16 +130,16 @@ export function Sidebar() {
           )}
         </nav>
 
-        <div className="border-t border-border p-4 hidden lg:block">
+        <div className="border-t border-border p-3 hidden lg:block">
           <Button
             variant="outline"
-            className="mb-3 flex w-full items-center justify-between text-sm font-medium"
+            className="mb-2 flex w-full items-center justify-between text-xs font-medium h-8"
             onClick={handleLogout}
           >
             <span>Sair</span>
-            <Zap className="h-4 w-4" />
+            <Zap className="h-3 w-3" />
           </Button>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[10px] text-muted-foreground">
             Versão 1.0.3 • TNS R2D2 • Horário Brasília: {brazilTime}
           </p>
         </div>
