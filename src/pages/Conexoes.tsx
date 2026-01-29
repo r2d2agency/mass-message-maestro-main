@@ -151,6 +151,18 @@ const Conexoes = () => {
       } else {
         setConnections(prev => prev.map(c => c.id === connection.id ? { ...c, status: 'disconnected' } : c));
       }
+
+      // Persist status to backend if changed
+      if (state.status !== connection.status) {
+        try {
+           await api(`/api/connections/${connection.id}`, {
+             method: 'PATCH',
+             body: { status: state.status }
+           });
+        } catch (err) {
+           console.error("Failed to update status in backend", err);
+        }
+      }
     } catch (error) {
       console.error(error);
     } finally {

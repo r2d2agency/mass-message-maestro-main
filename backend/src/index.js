@@ -89,6 +89,22 @@ async function ensureSchemaUpdates() {
       `);
       console.log('Multi-message schema updates applied successfully.');
     }
+
+    // Check for is_whatsapp column in contacts
+    const checkValidationCol = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='contacts' AND column_name='is_whatsapp'
+    `);
+    
+    if (checkValidationCol.rows.length === 0) {
+      console.log('Applying schema updates for contact validation...');
+      await query(`
+        ALTER TABLE contacts 
+        ADD COLUMN IF NOT EXISTS is_whatsapp BOOLEAN DEFAULT NULL;
+      `);
+      console.log('Contact validation schema updates applied successfully.');
+    }
   } catch (error) {
     console.error('Error applying schema updates:', error);
   }

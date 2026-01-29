@@ -45,6 +45,7 @@ interface Contact {
   name: string;
   phone: string;
   listId: string;
+  isWhatsapp?: boolean | null;
 }
 
 interface ApiContactList {
@@ -59,6 +60,7 @@ interface ApiContact {
   name: string;
   phone: string;
   list_id: string;
+  is_whatsapp?: boolean | null;
 }
 
 interface ImportResult {
@@ -110,6 +112,7 @@ const Contatos = () => {
   const [isEditContactOpen, setIsEditContactOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isUpdatingContact, setIsUpdatingContact] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -136,6 +139,7 @@ const Contatos = () => {
             name: contact.name,
             phone: contact.phone,
             listId: contact.list_id,
+            isWhatsapp: contact.is_whatsapp,
           }))
         );
       } catch (error) {
@@ -323,6 +327,53 @@ const Contatos = () => {
       });
     } finally {
       setIsUpdatingContact(false);
+    }
+  };
+
+  const handleValidateList = async () => {
+    if (!selectedList) return;
+
+    try {
+      setIsValidating(true);
+      const result = await api<{ success: boolean; validated: number }>(
+        `/api/contacts/lists/${selectedList}/validate`,
+        { method: "POST" }
+      );
+
+      toast({
+        title: "Validação concluída",
+        description: `${result.validated} contatos foram verificados.`,
+      });
+
+      // Refresh contacts to show new status
+      const refreshedContacts = await api<ApiContact[]>(
+        `/api/contacts/lists/${selectedList}/contacts`
+      );
+
+      setContacts((prev) => {
+        // Create a map of existing contacts to preserve other fields if needed, 
+        // but here we just want to update the list for the selected list.
+        // However, we have a global contacts state.
+        // We should replace the contacts belonging to this list.
+        const otherContacts = prev.filter((c) => c.listId !== selectedList);
+        const newContacts = refreshedContacts.map((contact) => ({
+          id: contact.id,
+          name: contact.name,
+          phone: contact.phone,
+          listId: contact.list_id,
+          isWhatsapp: contact.is_whatsapp,
+        }));
+        return [...otherContacts, ...newContacts];
+      });
+    } catch (error) {
+      toast({
+        title: "Erro na validação",
+        description:
+          error instanceof Error ? error.message : "Tente novamente mais tarde",
+        variant: "destructive",
+      });
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -642,7 +693,7 @@ const Contatos = () => {
 
       toast({
         title: "Importação concluída",
-        description: `Total no arquivo: ${accumulatedResult.total} | Com WhatsApp: ${accumulatedResult.totalWhatsapp} | Importados: ${accumulatedResult.imported} | Com erros: ${accumulatedResult.totalErrors}`,
+        description: `Total: ${accumulatedResult.total} | Importados: ${accumulatedResult.imported} | Erros/Duplicados: ${accumulatedResult.totalErrors}`,
       });
     } catch (error) {
       toast({
@@ -742,6 +793,20 @@ const Contatos = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {selectedList && (
+              <Button 
+                variant="outline" 
+                onClick={handleValidateList} 
+                disabled={isValidating}
+              >
+                {isValidating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                )}
+                {isValidating ? "Validando..." : "Validar Lista"}
+              </Button>
+            )}
             <Dialog open={isListDialogOpen} onOpenChange={setIsListDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" onClick={handleOpenCreateList}>
@@ -1113,6 +1178,7 @@ const Contatos = () => {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Telefone</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Lista</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -1122,6 +1188,23 @@ const Contatos = () => {
                     <TableRow key={contact.id}>
                       <TableCell className="font-medium">{contact.name}</TableCell>
                       <TableCell>{contact.phone}</TableCell>
+                      <TableCell>
+                        {contact.isWhatsapp === true && (
+                          <Badge variant="outline" className="border-green-500 text-green-600 bg-green-50">
+                             <CheckCircle2 className="h-3 w-3 mr-1" /> WhatsApp
+                          </Badge>
+                        )}
+                        {contact.isWhatsapp === false && (
+                          <Badge variant="destructive">
+                             <XCircle className="h-3 w-3 mr-1" /> Inválido
+                          </Badge>
+                        )}
+                        {(contact.isWhatsapp === null || contact.isWhatsapp === undefined) && (
+                          <Badge variant="secondary">
+                             <HelpCircle className="h-3 w-3 mr-1" /> Pendente
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">
                           {lists.find((l) => l.id === contact.listId)?.name}

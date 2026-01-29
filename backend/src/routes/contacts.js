@@ -467,136 +467,32 @@ router.post('/lists/:listId/import', async (req, res) => {
       });
     }
 
-    // Use user's latest Evolution connection to validate numbers
-    const connectionResult = await query(
-      `SELECT api_url, api_key, instance_name
-       FROM connections
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [req.userId]
-    );
-
-    if (connectionResult.rows.length === 0) {
-      return res.status(400).json({
-        error: 'Configure uma conexão Evolution antes de importar contatos',
-      });
-    }
-
-    const { api_url, api_key, instance_name } = connectionResult.rows[0];
-
-    // Call Evolution API to check which numbers are WhatsApp
-    // We only check unique candidates
-    const numbersToCheck = uniqueCandidates.map(c => c.normalizedPhone);
-
-    let whatsappNumbers = new Set();
-
-    try {
-      const evoResponse = await fetch(
-        `${api_url}/chat/whatsappNumbers/${instance_name}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: api_key,
-          },
-          body: JSON.stringify({ numbers: numbersToCheck }),
-        }
-      );
-
-      if (!evoResponse.ok) {
-        console.error('Evolution whatsappNumbers error status:', evoResponse.status);
-        // Fallback: If validation fails, we might want to allow import anyway or fail
-        // For now, let's treat it as error but maybe we should allow?
-        // User said "only 5 of 50 imported". This implies strict validation is the issue.
-        // Let's Log it and continue with empty set (will result in 0 imported if strictly checking)
-      } else {
-        const evoData = await evoResponse.json();
-
-        const resultsArray = Array.isArray(evoData)
-            ? evoData
-            : Array.isArray(evoData.numbers)
-            ? evoData.numbers
-            : Array.isArray(evoData.result)
-            ? evoData.result
-            : Array.isArray(evoData.response)
-            ? evoData.response
-            : [];
-
-        for (const item of resultsArray) {
-            // Robust extraction of number
-            const rawNum = (item.number || item.phone || '').toString().replace(/\D/g, '');
-            // Check existence flag (Evolution returns exists: true/false)
-            // Some versions might return status: 404 for non-existent, but here we likely get an array of objects
-            const exists =
-            item.exists === true ||
-            item.isWhatsapp === true ||
-            item.is_whatsapp === true ||
-            item.isWhatsApp === true ||
-            // If the API returns the number in the list, it MIGHT imply existence if it doesn't explicitly say exists:false
-            // But usually Evolution is explicit.
-            // Let's assume strict check for now but improve matching below
-            (item.jid && item.jid.includes('@s.whatsapp.net'));
-
-            if (rawNum && exists) {
-                whatsappNumbers.add(rawNum);
-            }
-        }
-      }
-    } catch (err) {
-      console.error('Evolution whatsappNumbers request failed:', err);
-      // Fallback or error?
-    }
-
+    // Use user's latest Evolution connection to validate numbers (Optional - skipping for speed)
+    // The user requested to validate AFTER import. So we just import everything here.
+    
     const validContacts = [];
-    let totalWhatsapp = 0;
     let duplicates = candidates.length - uniqueCandidates.length;
 
     for (const c of uniqueCandidates) {
-      // Improved matching logic:
-      // Check if the candidate phone is in the verified set (exact match)
-      // OR if any verified number ends with the candidate phone (e.g. 5511... ends with 11...)
-      // OR if the candidate phone ends with any verified number (unlikely but possible)
-      
-      let isWhatsapp = whatsappNumbers.has(c.normalizedPhone);
-      
-      if (!isWhatsapp) {
-          // Try suffix matching
-          for (const verifiedNum of whatsappNumbers) {
-              if (verifiedNum.endsWith(c.normalizedPhone) || c.normalizedPhone.endsWith(verifiedNum)) {
-                  isWhatsapp = true;
-                  break;
-              }
-          }
-      }
-
-      // Fallback: If the set is empty (API failed/returned weird data) but the number looks valid?
-      // No, user wants verification. But if only 5/50 imported, it means matching failed.
-      // Suffix matching should solve the country code issue (55).
-
-      if (isWhatsapp) {
-        totalWhatsapp += 1;
-        validContacts.push({
-          name: c.name,
-          phone: c.normalizedPhone,
-        });
-      } else {
-        totalErrors += 1;
-      }
+      // Just accept all unique candidates
+      validContacts.push({
+        name: c.name,
+        phone: c.normalizedPhone,
+      });
     }
 
     const imported = validContacts.length;
 
     if (imported > 0) {
       const values = validContacts
-        .map((c, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`)
+        .map((c, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3}, NULL)`) // NULL for is_whatsapp
         .join(', ');
 
       const params = [listId, ...validContacts.flatMap(c => [c.name, c.phone])];
       
-      // Use ON CONFLICT DO NOTHING just in case, though we filtered uniqueCandidates
+      // Use ON CONFLICT DO NOTHING just in case
       await query(
-        `INSERT INTO contacts (list_id, name, phone) VALUES ${values} ON CONFLICT DO NOTHING`,
+        `INSERT INTO contacts (list_id, name, phone, is_whatsapp) VALUES ${values} ON CONFLICT DO NOTHING`,
         params
       );
     }
@@ -605,13 +501,154 @@ router.post('/lists/:listId/import', async (req, res) => {
       success: true,
       total,
       imported,
-      totalWhatsapp,
-      totalErrors,
-      duplicates
+      totalWhatsapp: 0, // Not checking anymore
+      totalErrors: 0, // Not checking anymore
+      duplicates,
+      message: 'Contatos importados com sucesso. Use a opção "Validar" para verificar quais possuem WhatsApp.'
     });
   } catch (error) {
     console.error('Import contacts error:', error);
     res.status(500).json({ error: 'Erro ao importar contatos' });
+  }
+});
+
+// Validate contacts in a list
+router.post('/lists/:listId/validate', async (req, res) => {
+  try {
+    const { listId } = req.params;
+
+    // Verify list belongs to user
+    const listCheck = await query(
+      'SELECT id FROM contact_lists WHERE id = $1 AND user_id = $2',
+      [listId, req.userId]
+    );
+
+    if (listCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Lista não encontrada' });
+    }
+
+    // Get connection
+    const connectionResult = await query(
+      `SELECT api_url, api_key, instance_name
+       FROM connections
+       WHERE user_id = $1 AND status = 'connected'
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [req.userId]
+    );
+
+    let connection = null;
+
+    if (connectionResult.rows.length === 0) {
+      // Fallback to any connection if status is not reliably updated
+       const anyConnection = await query(
+        `SELECT api_url, api_key, instance_name
+         FROM connections
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [req.userId]
+      );
+      if (anyConnection.rows.length === 0) {
+         return res.status(400).json({ error: 'Nenhuma conexão Evolution disponível.' });
+      }
+      connection = anyConnection.rows[0];
+    } else {
+      connection = connectionResult.rows[0];
+    }
+
+    const { api_url, api_key, instance_name } = connection;
+
+    // Get contacts to validate (is_whatsapp IS NULL)
+    const contactsResult = await query(
+      'SELECT id, phone FROM contacts WHERE list_id = $1 AND is_whatsapp IS NULL',
+      [listId]
+    );
+
+    const contactsToValidate = contactsResult.rows;
+
+    if (contactsToValidate.length === 0) {
+      return res.json({ message: 'Todos os contatos já foram validados ou a lista está vazia.', validated: 0 });
+    }
+
+    // Process in chunks to avoid timeout
+    const CHUNK_SIZE = 50; 
+    let validatedCount = 0;
+    
+    for (let i = 0; i < contactsToValidate.length; i += CHUNK_SIZE) {
+        const chunk = contactsToValidate.slice(i, i + CHUNK_SIZE);
+        const numbersToCheck = chunk.map(c => c.phone);
+
+        try {
+            const evoResponse = await fetch(
+                `${api_url}/chat/whatsappNumbers/${instance_name}`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        apikey: api_key,
+                    },
+                    body: JSON.stringify({ numbers: numbersToCheck }),
+                }
+            );
+
+            if (!evoResponse.ok) {
+                console.error('Validation error:', evoResponse.status);
+                continue; 
+            }
+
+            const evoData = await evoResponse.json();
+            
+             const resultsArray = Array.isArray(evoData) ? evoData : (evoData.numbers || []);
+             
+             const validNumbers = new Set();
+             
+             for (const item of resultsArray) {
+                 const rawNum = (item.number || item.phone || '').toString().replace(/\D/g, '');
+                 const exists = item.exists === true || item.isWhatsapp === true || (item.jid && item.jid.includes('@s.whatsapp.net'));
+                 
+                 if (rawNum && exists) {
+                     validNumbers.add(rawNum);
+                 }
+             }
+
+             const validIds = [];
+             const invalidIds = [];
+             
+             for (const c of chunk) {
+                 let isValid = validNumbers.has(c.phone);
+                 if (!isValid) {
+                     for (const v of validNumbers) {
+                         if (v.endsWith(c.phone) || c.phone.endsWith(v)) {
+                             isValid = true;
+                             break;
+                         }
+                     }
+                 }
+                 
+                 if (isValid) validIds.push(c.id);
+                 else invalidIds.push(c.id);
+             }
+             
+             if (validIds.length > 0) {
+                 await query(`UPDATE contacts SET is_whatsapp = TRUE WHERE id = ANY($1::uuid[])`, [validIds]);
+             }
+             if (invalidIds.length > 0) {
+                 await query(`UPDATE contacts SET is_whatsapp = FALSE WHERE id = ANY($1::uuid[])`, [invalidIds]);
+             }
+             
+             validatedCount += chunk.length;
+
+        } catch (err) {
+            console.error('Validation chunk failed:', err);
+        }
+    }
+
+    res.json({ success: true, validated: validatedCount });
+
+  } catch (error) {
+    console.error('Validation error:', error);
+    res.status(500).json({ error: 'Erro ao validar contatos' });
   }
 });
 
