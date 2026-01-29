@@ -98,6 +98,103 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// Update user details
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      name, 
+      email, 
+      password, 
+      role, 
+      plan_name, 
+      monthly_message_limit,
+      status 
+    } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Nome e Email são obrigatórios' });
+    }
+
+    // Check if email exists for another user
+    const existing = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já em uso por outro usuário' });
+    }
+
+    let passwordHash = null;
+    if (password && password.trim()) {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    // Update basic info
+    let updateQuery = `
+      UPDATE users 
+      SET name = $1, 
+          email = $2, 
+          plan_name = $3, 
+          monthly_message_limit = $4,
+          updated_at = NOW()
+    `;
+    
+    const params = [name, email, plan_name || null, monthly_message_limit || null];
+    let paramCount = 5;
+
+    if (passwordHash) {
+      updateQuery += `, password_hash = $${paramCount}`;
+      params.push(passwordHash);
+      paramCount++;
+    }
+
+    if (status) {
+      const allowedStatus = ['active', 'inactive', 'blocked'];
+      if (allowedStatus.includes(status)) {
+         updateQuery += `, status = $${paramCount}`;
+         params.push(status);
+         paramCount++;
+      }
+    }
+
+    updateQuery += ` WHERE id = $${paramCount} RETURNING id, email, name, status, plan_name, monthly_message_limit, created_at, updated_at`;
+    params.push(id);
+
+    const result = await query(updateQuery, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const updatedUser = result.rows[0];
+
+    // Update role if provided
+    if (role && ['admin', 'manager', 'user'].includes(role)) {
+       // Check if trying to change own role if admin? (Optional safety)
+       await query(
+         `INSERT INTO user_roles (user_id, role) 
+          VALUES ($1, $2) 
+          ON CONFLICT (user_id, role) 
+          DO UPDATE SET role = EXCLUDED.role`,
+         [id, role]
+       );
+       updatedUser.role = role;
+    } else {
+       // Fetch current role
+       const roleRes = await query(
+        `SELECT role FROM user_roles WHERE user_id = $1 
+         ORDER BY CASE WHEN role = 'admin' THEN 1 ELSE 2 END LIMIT 1`,
+        [id]
+       );
+       updatedUser.role = roleRes.rows[0]?.role || 'user';
+    }
+
+    res.json(updatedUser);
+
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Erro ao atualizar usuário' });
+  }
+});
+
 router.patch('/:id/password', async (req, res) => {
   try {
     const { id } = req.params;
