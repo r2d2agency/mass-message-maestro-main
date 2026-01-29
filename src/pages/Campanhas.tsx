@@ -848,7 +848,7 @@ const Campanhas = () => {
                             <Eye className="h-4 w-4" />
                             Monitorar
                           </Button>
-                          {campaign.status === "running" && (
+                          {(campaign.status === "running" || campaign.status === "scheduled") && (
                             <Button
                               variant="outline"
                               size="sm"

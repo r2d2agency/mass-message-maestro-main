@@ -28,7 +28,6 @@ const adjustToBusinessHours = (date, startHourStr, endHourStr) => {
     d.setUTCFullYear(brDate.getUTCFullYear());
     d.setUTCMonth(brDate.getUTCMonth());
     d.setUTCDate(brDate.getUTCDate());
-    // Convert BRT start hour to UTC (add 3 hours)
     d.setUTCHours(startHour + 3, 0, 0, 0); 
   }
   // Se for depois do horário de fim BRT
@@ -40,7 +39,6 @@ const adjustToBusinessHours = (date, startHourStr, endHourStr) => {
     d.setUTCFullYear(tomorrow.getUTCFullYear());
     d.setUTCMonth(tomorrow.getUTCMonth());
     d.setUTCDate(tomorrow.getUTCDate());
-    // Convert BRT start hour to UTC (add 3 hours)
     d.setUTCHours(startHour + 3, 0, 0, 0);
   }
   
@@ -85,7 +83,33 @@ export const scheduleCampaign = async (campaignId) => {
 
     // User settings for business hours
     const { start_work_hour, end_work_hour } = campaign;
-    console.log(`Using business hours: ${start_work_hour || '08:00'} - ${end_work_hour || '18:00'} for campaign ${campaignId}`);
+    
+    // Determine effective business hours from campaign settings (prioritize campaign specific times)
+    let effectiveStartHourStr = start_work_hour || '08:00';
+    let effectiveEndHourStr = end_work_hour || '18:00';
+
+    // If campaign has scheduled_at, use its time as start hour
+    if (campaign.scheduled_at) {
+        const d = new Date(campaign.scheduled_at);
+        // Convert to BRT to get the hour user selected
+        const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+        const h = brDate.getUTCHours();
+        effectiveStartHourStr = `${h.toString().padStart(2, '0')}:00`;
+    }
+
+    // If campaign has end_at, use its time as end hour
+    if (campaign.end_at) {
+        const d = new Date(campaign.end_at);
+        // Convert to BRT to get the hour user selected
+        const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+        const h = brDate.getUTCHours();
+        // If minutes > 0, maybe round up? But usually end hour is strict. 
+        // Let's use the hour. If user set 21:30, treating as 21:00 might be safer or 22:00?
+        // simple approach: use the hour.
+        effectiveEndHourStr = `${h.toString().padStart(2, '0')}:00`;
+    }
+
+    console.log(`Using business hours: ${effectiveStartHourStr} - ${effectiveEndHourStr} for campaign ${campaignId}`);
 
     // Get message_ids or fallback to message_id
     let messageIds = campaign.message_ids || [];
@@ -150,7 +174,7 @@ export const scheduleCampaign = async (campaignId) => {
         ) + minDelay;
 
       nextTime = new Date(nextTime.getTime() + delay * 1000);
-      nextTime = adjustToBusinessHours(nextTime);
+      nextTime = adjustToBusinessHours(nextTime, effectiveStartHourStr, effectiveEndHourStr);
 
       messagesInBatch += 1;
       
@@ -158,7 +182,7 @@ export const scheduleCampaign = async (campaignId) => {
       if (messagesInBatch >= currentBatchLimit) {
         // Add pause
         nextTime = new Date(nextTime.getTime() + pauseSeconds * 1000);
-        nextTime = adjustToBusinessHours(nextTime);
+        nextTime = adjustToBusinessHours(nextTime, effectiveStartHourStr, effectiveEndHourStr);
         messagesInBatch = 0;
         // New random limit for next batch
         currentBatchLimit = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
@@ -191,5 +215,93 @@ export const scheduleCampaign = async (campaignId) => {
   } catch (error) {
     console.error('Error scheduling campaign:', error);
     throw error;
+  }
+};
+
+export const recalibrateCampaign = async (campaignId) => {
+  try {
+    console.log(`Recalibrating campaign ${campaignId}...`);
+    
+    // Get campaign settings
+    const campaignRes = await query(`
+      SELECT c.*, u.start_work_hour, u.end_work_hour 
+      FROM campaigns c 
+      JOIN users u ON c.user_id = u.id 
+      WHERE c.id = $1
+    `, [campaignId]);
+
+    if (campaignRes.rows.length === 0) return;
+    const campaign = campaignRes.rows[0];
+
+    const { start_work_hour, end_work_hour } = campaign;
+
+    // Determine effective business hours from campaign settings (prioritize campaign specific times)
+    let effectiveStartHourStr = start_work_hour || '08:00';
+    let effectiveEndHourStr = end_work_hour || '18:00';
+
+    // If campaign has scheduled_at, use its time as start hour
+    if (campaign.scheduled_at) {
+        const d = new Date(campaign.scheduled_at);
+        const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+        const h = brDate.getUTCHours();
+        effectiveStartHourStr = `${h.toString().padStart(2, '0')}:00`;
+    }
+
+    // If campaign has end_at, use its time as end hour
+    if (campaign.end_at) {
+        const d = new Date(campaign.end_at);
+        const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+        const h = brDate.getUTCHours();
+        effectiveEndHourStr = `${h.toString().padStart(2, '0')}:00`;
+    }
+
+    // Get pending messages ordered by current scheduled time
+    const pendingRes = await query(`
+        SELECT id, scheduled_for 
+        FROM campaign_messages 
+        WHERE campaign_id = $1 AND status = 'pending' 
+        ORDER BY scheduled_for ASC
+    `, [campaignId]);
+    
+    if (pendingRes.rows.length === 0) return;
+
+    let minDelay = campaign.min_delay || 30;
+    let maxDelay = campaign.max_delay || 120;
+    if (minDelay < 1) minDelay = 1;
+    if (maxDelay <= minDelay) maxDelay = minDelay + 1;
+
+    // Start scheduling from NOW
+    let nextTime = new Date();
+    
+    // Updates batch
+    const updates = [];
+    
+    // Pause logic
+    const pauseSeconds = 600;
+    let currentBatchLimit = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
+    let messagesInBatch = 0;
+
+    for (const msg of pendingRes.rows) {
+         // Add random delay
+         const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+         
+         nextTime = new Date(nextTime.getTime() + delay * 1000);
+         nextTime = adjustToBusinessHours(nextTime, effectiveStartHourStr, effectiveEndHourStr);
+         
+         messagesInBatch++;
+         if (messagesInBatch >= currentBatchLimit) {
+             nextTime = new Date(nextTime.getTime() + pauseSeconds * 1000);
+             nextTime = adjustToBusinessHours(nextTime, effectiveStartHourStr, effectiveEndHourStr);
+             messagesInBatch = 0;
+             currentBatchLimit = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
+         }
+
+         await query('UPDATE campaign_messages SET scheduled_for = $1 WHERE id = $2', [nextTime, msg.id]);
+    }
+
+    console.log(`Recalibrated ${pendingRes.rows.length} messages for campaign ${campaignId}`);
+
+  } catch (error) {
+    console.error('Recalibrate error:', error);
   }
 };
