@@ -63,6 +63,32 @@ async function ensureSchemaUpdates() {
       `);
       console.log('Schema updates applied successfully.');
     }
+
+    // Check for message_ids column in campaigns
+    const checkMultiMsg = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='campaigns' AND column_name='message_ids'
+    `);
+
+    if (checkMultiMsg.rows.length === 0) {
+      console.log('Applying schema updates for multi-message support...');
+      await query(`
+        ALTER TABLE campaigns 
+        ADD COLUMN IF NOT EXISTS message_ids JSONB DEFAULT '[]';
+      `);
+      await query(`
+        ALTER TABLE campaign_messages 
+        ADD COLUMN IF NOT EXISTS message_id UUID REFERENCES message_templates(id) ON DELETE SET NULL;
+      `);
+      // Migrate existing data
+       await query(`
+        UPDATE campaigns 
+        SET message_ids = jsonb_build_array(message_id) 
+        WHERE message_id IS NOT NULL AND (message_ids IS NULL OR jsonb_array_length(message_ids) = 0);
+      `);
+      console.log('Multi-message schema updates applied successfully.');
+    }
   } catch (error) {
     console.error('Error applying schema updates:', error);
   }

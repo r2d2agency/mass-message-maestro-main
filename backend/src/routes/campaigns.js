@@ -188,15 +188,24 @@ router.put('/:id', async (req, res) => {
       connection_id,
       list_id,
       message_id,
+      message_ids,
       scheduled_at,
       end_at,
       min_delay,
       max_delay
     } = req.body;
 
-    if (!name || !connection_id || !list_id || !message_id) {
+    // Normalize message_ids
+    let finalMessageIds = [];
+    if (Array.isArray(message_ids) && message_ids.length > 0) {
+      finalMessageIds = message_ids;
+    } else if (message_id) {
+      finalMessageIds = [message_id];
+    }
+
+    if (!name || !connection_id || !list_id || finalMessageIds.length === 0) {
       return res.status(400).json({
-        error: 'Nome, conexão, lista e mensagem são obrigatórios'
+        error: 'Nome, conexão, lista e pelo menos uma mensagem são obrigatórios'
       });
     }
 
@@ -214,17 +223,20 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Campanhas concluídas não podem ser editadas' });
     }
 
+    const mainMessageId = finalMessageIds[0];
+
     const result = await query(
       `UPDATE campaigns 
-       SET name = $1, connection_id = $2, list_id = $3, message_id = $4, 
-           scheduled_at = $5, end_at = $6, min_delay = $7, max_delay = $8, updated_at = NOW()
-       WHERE id = $9
+       SET name = $1, connection_id = $2, list_id = $3, message_id = $4, message_ids = $5,
+           scheduled_at = $6, end_at = $7, min_delay = $8, max_delay = $9, updated_at = NOW()
+       WHERE id = $10
        RETURNING *`,
       [
         name, 
         connection_id, 
         list_id, 
-        message_id, 
+        mainMessageId,
+        JSON.stringify(finalMessageIds),
         scheduled_at || null,
         end_at || null,
         min_delay || 90,

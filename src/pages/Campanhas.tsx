@@ -426,7 +426,7 @@ const Campanhas = () => {
           name: campaignName.trim(),
           connection_id: selectedConnectionId,
           list_id: selectedListId,
-          message_id: selectedMessageIds[0], // Primary message
+          message_id: selectedMessageIds.length > 0 ? selectedMessageIds[0] : null,
           message_ids: selectedMessageIds,
           scheduled_at,
           end_at: endDateTime.toISOString(),
@@ -976,27 +976,35 @@ const Campanhas = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Mensagem</Label>
-                    <Select
-                      value={selectedMessageId}
-                      onValueChange={setSelectedMessageId}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma mensagem" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {messages.length === 0 && (
-                          <SelectItem value="none" disabled>
-                            Nenhuma mensagem disponível
-                          </SelectItem>
-                        )}
-                        {messages.map((message) => (
-                          <SelectItem key={message.id} value={message.id}>
+                    <Label>Mensagens (Selecione uma ou mais)</Label>
+                    <div className="border rounded-md p-4 max-h-[200px] overflow-y-auto space-y-2 bg-background">
+                      {messages.length === 0 && (
+                        <p className="text-sm text-muted-foreground">Nenhuma mensagem disponível</p>
+                      )}
+                      {messages.map((message) => (
+                        <div key={message.id} className="flex items-center space-x-2 p-1 hover:bg-muted/50 rounded">
+                          <Checkbox 
+                            id={`msg-${message.id}`} 
+                            checked={selectedMessageIds.includes(message.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedMessageIds((prev) => [...prev, message.id]);
+                              } else {
+                                setSelectedMessageIds((prev) => prev.filter(id => id !== message.id));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`msg-${message.id}`} className="text-sm font-normal cursor-pointer flex-1">
                             {message.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedMessageIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedMessageIds.length} mensagem(ns) selecionada(s)
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
