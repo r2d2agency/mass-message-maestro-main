@@ -257,6 +257,19 @@ const Campanhas = () => {
 
         setCampaigns(mappedCampaigns);
         setConnections(connectionsData);
+        if (connectionsData.length > 0) {
+          // Auto-select if there is only one connection
+          if (connectionsData.length === 1) {
+            setSelectedConnectionId(connectionsData[0].id);
+          } else {
+            // Or if there is a connected one, prefer it
+            const connected = connectionsData.find(c => c.status === 'connected' || c.status === 'open');
+            if (connected) {
+              setSelectedConnectionId(connected.id);
+            }
+          }
+        }
+
         setLists(
           listsData.map((list) => ({
             id: list.id,
@@ -332,7 +345,7 @@ const Campanhas = () => {
       return;
     }
 
-    if (!selectedConnectionId || !selectedListId || !selectedMessageId) {
+    if (!selectedConnectionId || !selectedListId || (selectedMessageIds.length === 0 && !selectedMessageId)) {
       toast({
         title: "Selecione conexão, lista e mensagem",
         variant: "destructive",
@@ -931,7 +944,12 @@ const Campanhas = () => {
                         )}
                         {connections.map((connection) => (
                           <SelectItem key={connection.id} value={connection.id}>
-                            {connection.name}
+                            <div className="flex items-center gap-2">
+                              {(connection.status === "connected" || connection.status === "open") && (
+                                <span className="h-2 w-2 rounded-full bg-green-500" />
+                              )}
+                              {connection.name}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
