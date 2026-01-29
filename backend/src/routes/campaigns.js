@@ -306,8 +306,8 @@ router.get('/:id/export', async (req, res) => {
   }
 });
 
-// Get campaign logs
-router.get('/:id/logs', async (req, res) => {
+// Get campaign messages (logs)
+router.get('/:id/messages', async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -327,12 +327,14 @@ router.get('/:id/logs', async (req, res) => {
     const result = await query(
       `SELECT 
          cm.id, 
-         ct.name as "contactName", 
+         cm.campaign_id,
+         ct.name as contact_name, 
          ct.phone, 
          cm.status, 
-         cm.error_message as "errorMessage", 
-         cm.scheduled_for as "scheduledAt", 
-         cm.sent_at as "sentAt"
+         cm.error_message, 
+         cm.scheduled_for, 
+         cm.sent_at,
+         cm.created_at
        FROM campaign_messages cm
        LEFT JOIN contacts ct ON cm.contact_id = ct.id
        WHERE cm.campaign_id = $1
@@ -343,8 +345,8 @@ router.get('/:id/logs', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Get campaign logs error:', error);
-    res.status(500).json({ error: 'Erro ao buscar logs da campanha' });
+    console.error('Get campaign messages error:', error);
+    res.status(500).json({ error: 'Erro ao buscar mensagens da campanha' });
   }
 });
 
