@@ -210,7 +210,7 @@ export const startWorker = () => {
         LEFT JOIN contacts ct ON cm.contact_id = ct.id
         WHERE cm.status = 'pending' 
           AND cm.scheduled_for <= NOW()
-          AND c.status = 'running'
+          AND c.status IN ('running', 'pending')
         ORDER BY cm.scheduled_for ASC
         LIMIT 20
       `);
