@@ -197,6 +197,7 @@ export const startWorker = () => {
       const res = await query(`
         SELECT cm.*, 
                c.connection_id, 
+               c.status as campaign_status,
                c.message_id as campaign_default_message_id,
                conn.api_url, conn.api_key, conn.instance_name,
                COALESCE(mt_specific.items, mt_default.items) as message_items,

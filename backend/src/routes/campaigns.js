@@ -134,6 +134,39 @@ router.patch('/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
+    // If resuming (running), reschedule pending messages that are in the past
+    if (status === 'running') {
+      try {
+        const earliest = await query(
+          `SELECT scheduled_for FROM campaign_messages 
+           WHERE campaign_id = $1 AND status = 'pending' AND scheduled_for < NOW()
+           ORDER BY scheduled_for ASC LIMIT 1`,
+          [id]
+        );
+        
+        if (earliest.rows.length > 0) {
+          const firstDate = new Date(earliest.rows[0].scheduled_for);
+          const now = new Date();
+          const diffMs = now.getTime() - firstDate.getTime();
+          
+          // Add 5 seconds buffer to ensure they are slightly in the future
+          const adjustmentMs = diffMs + 5000;
+          
+          if (adjustmentMs > 0) {
+            await query(
+              `UPDATE campaign_messages 
+               SET scheduled_for = scheduled_for + $2::interval
+               WHERE campaign_id = $1 AND status = 'pending'`,
+              [id, `${adjustmentMs} milliseconds`]
+            );
+            console.log(`Rescheduled campaign ${id} by ${adjustmentMs}ms`);
+          }
+        }
+      } catch (err) {
+        console.error('Error rescheduling campaign:', err);
+      }
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Update campaign status error:', error);
