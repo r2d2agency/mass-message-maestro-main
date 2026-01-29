@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -97,13 +98,14 @@ interface ApiCampaign {
   status: "pending" | "running" | "paused" | "completed" | "cancelled";
   list_name?: string;
   message_name?: string;
+  message_id: string;
+  message_ids?: string[];
   scheduled_at?: string | null;
   end_at?: string | null;
   min_delay?: number | null;
   max_delay?: number | null;
   connection_id: string;
   list_id: string;
-  message_id: string;
   created_at: string;
   sent_count?: number;
   failed_count?: number;
@@ -185,7 +187,8 @@ const Campanhas = () => {
   const [campaignName, setCampaignName] = useState("");
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>("");
   const [selectedListId, setSelectedListId] = useState<string>("");
-  const [selectedMessageId, setSelectedMessageId] = useState<string>("");
+  const [selectedMessageId, setSelectedMessageId] = useState<string>(""); // Keep for backward compatibility/single select fallback if needed
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [startTime, setStartTime] = useState("08:00");
@@ -423,7 +426,8 @@ const Campanhas = () => {
           name: campaignName.trim(),
           connection_id: selectedConnectionId,
           list_id: selectedListId,
-          message_id: selectedMessageId,
+          message_id: selectedMessageIds[0], // Primary message
+          message_ids: selectedMessageIds,
           scheduled_at,
           end_at: endDateTime.toISOString(),
           min_delay,
@@ -439,6 +443,7 @@ const Campanhas = () => {
       setSelectedConnectionId("");
       setSelectedListId("");
       setSelectedMessageId("");
+      setSelectedMessageIds([]);
       setStartDate(undefined);
       setEndDate(undefined);
       setStartTime("08:00");
@@ -469,6 +474,7 @@ const Campanhas = () => {
           connectionId: campaign.connection_id,
           listId: campaign.list_id,
           messageId: campaign.message_id,
+          messageIds: campaign.message_ids,
           scheduledAtRaw: campaign.scheduled_at ?? null,
           endAtRaw: campaign.end_at ?? null,
           minDelay: campaign.min_delay ?? null,
@@ -588,7 +594,7 @@ const Campanhas = () => {
     setCampaignName("");
     setSelectedConnectionId("");
     setSelectedListId("");
-    setSelectedMessageId("");
+    setSelectedMessageIds([]);
     setStartDate(undefined);
     setEndDate(undefined);
     setStartTime("08:00");
@@ -602,7 +608,14 @@ const Campanhas = () => {
     setCampaignName(campaign.name);
     setSelectedConnectionId(campaign.connectionId);
     setSelectedListId(campaign.listId);
-    setSelectedMessageId(campaign.messageId);
+    
+    if (campaign.messageIds && campaign.messageIds.length > 0) {
+      setSelectedMessageIds(campaign.messageIds);
+    } else if (campaign.messageId) {
+      setSelectedMessageIds([campaign.messageId]);
+    } else {
+      setSelectedMessageIds([]);
+    }
     
     if (campaign.minDelay) setMinDelayInput(campaign.minDelay.toString());
     if (campaign.maxDelay) setMaxDelayInput(campaign.maxDelay.toString());

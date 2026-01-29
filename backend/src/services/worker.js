@@ -197,14 +197,15 @@ export const startWorker = () => {
       const res = await query(`
         SELECT cm.*, 
                c.connection_id, 
-               c.message_id,
+               c.message_id as campaign_default_message_id,
                conn.api_url, conn.api_key, conn.instance_name,
-               mt.items as message_items,
+               COALESCE(mt_specific.items, mt_default.items) as message_items,
                ct.name as contact_name
         FROM campaign_messages cm
         JOIN campaigns c ON cm.campaign_id = c.id
         JOIN connections conn ON c.connection_id = conn.id
-        JOIN message_templates mt ON c.message_id = mt.id
+        LEFT JOIN message_templates mt_default ON c.message_id = mt_default.id
+        LEFT JOIN message_templates mt_specific ON cm.message_id = mt_specific.id
         LEFT JOIN contacts ct ON cm.contact_id = ct.id
         WHERE cm.status = 'pending' 
           AND cm.scheduled_for <= NOW()

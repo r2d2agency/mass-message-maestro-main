@@ -55,12 +55,12 @@ async function insertBatch(batch) {
   let paramIndex = 1;
   
   for (const item of batch) {
-      values.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4})`);
-      params.push(item.campaign_id, item.contact_id, item.phone, item.status, item.scheduled_for);
-      paramIndex += 5;
+      values.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5})`);
+      params.push(item.campaign_id, item.contact_id, item.phone, item.status, item.scheduled_for, item.message_id);
+      paramIndex += 6;
   }
   
-  const queryStr = `INSERT INTO campaign_messages (campaign_id, contact_id, phone, status, scheduled_for) VALUES ${values.join(',')}`;
+  const queryStr = `INSERT INTO campaign_messages (campaign_id, contact_id, phone, status, scheduled_for, message_id) VALUES ${values.join(',')}`;
   await query(queryStr, params);
 }
 
@@ -86,6 +86,19 @@ export const scheduleCampaign = async (campaignId) => {
     // User settings for business hours
     const { start_work_hour, end_work_hour } = campaign;
     console.log(`Using business hours: ${start_work_hour || '08:00'} - ${end_work_hour || '18:00'} for campaign ${campaignId}`);
+
+    // Get message_ids or fallback to message_id
+    let messageIds = campaign.message_ids || [];
+    if (!messageIds || messageIds.length === 0) {
+        if (campaign.message_id) {
+            messageIds = [campaign.message_id];
+        }
+    }
+
+    if (messageIds.length === 0) {
+        console.error(`No messages found for campaign ${campaignId}`);
+        return;
+    }
 
     // 2. Get contacts
     const contactsRes = await query('SELECT * FROM contacts WHERE list_id = $1', [campaign.list_id]);
@@ -151,12 +164,16 @@ export const scheduleCampaign = async (campaignId) => {
         currentBatchLimit = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
       }
 
+      // Pick random message
+      const selectedMessageId = messageIds[Math.floor(Math.random() * messageIds.length)];
+
       currentBatch.push({
           campaign_id: campaignId,
           contact_id: contact.id,
           phone: contact.phone,
           status: 'pending',
-          scheduled_for: nextTime
+          scheduled_for: nextTime,
+          message_id: selectedMessageId
       });
 
       if (currentBatch.length >= INSERT_BATCH_SIZE) {

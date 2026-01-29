@@ -51,6 +51,18 @@ const setupDb = async () => {
       await pool.query('ALTER TABLE campaign_messages ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE;');
       console.log('Verified: campaign_messages columns exist.');
 
+      // Multi-message support migration
+      await pool.query("ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS message_ids JSONB DEFAULT '[]';");
+      await pool.query('ALTER TABLE campaign_messages ADD COLUMN IF NOT EXISTS message_id UUID REFERENCES message_templates(id) ON DELETE SET NULL;');
+      console.log('Verified: multi-message columns exist.');
+      
+      // Migrate existing single message_id to message_ids array if empty
+      await pool.query(`
+        UPDATE campaigns 
+        SET message_ids = jsonb_build_array(message_id) 
+        WHERE message_id IS NOT NULL AND (message_ids IS NULL OR jsonb_array_length(message_ids) = 0);
+      `);
+
     } catch (err) {
       console.warn('Manual check for schema updates failed:', err.message);
     }

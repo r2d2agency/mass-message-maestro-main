@@ -38,15 +38,24 @@ router.post('/', async (req, res) => {
       connection_id, 
       list_id, 
       message_id, 
+      message_ids,
       scheduled_at,
       end_at,
       min_delay,
       max_delay 
     } = req.body;
 
-    if (!name || !connection_id || !list_id || !message_id) {
+    // Normalize message_ids
+    let finalMessageIds = [];
+    if (Array.isArray(message_ids) && message_ids.length > 0) {
+      finalMessageIds = message_ids;
+    } else if (message_id) {
+      finalMessageIds = [message_id];
+    }
+
+    if (!name || !connection_id || !list_id || finalMessageIds.length === 0) {
       return res.status(400).json({ 
-        error: 'Nome, conexão, lista e mensagem são obrigatórios' 
+        error: 'Nome, conexão, lista e pelo menos uma mensagem são obrigatórios' 
       });
     }
 
@@ -54,24 +63,32 @@ router.post('/', async (req, res) => {
     const checks = await Promise.all([
       query('SELECT id FROM connections WHERE id = $1 AND user_id = $2', [connection_id, req.userId]),
       query('SELECT id FROM contact_lists WHERE id = $1 AND user_id = $2', [list_id, req.userId]),
-      query('SELECT id FROM message_templates WHERE id = $1 AND user_id = $2', [message_id, req.userId]),
+      // Verify all messages exist using ANY
+      query('SELECT id FROM message_templates WHERE id = ANY($1::uuid[]) AND user_id = $2', [finalMessageIds, req.userId]),
     ]);
 
-    if (checks.some(c => c.rows.length === 0)) {
-      return res.status(400).json({ error: 'Recursos inválidos' });
+    if (checks[0].rows.length === 0 || checks[1].rows.length === 0) {
+      return res.status(400).json({ error: 'Conexão ou Lista inválida' });
     }
+
+    if (checks[2].rows.length !== finalMessageIds.length) {
+      return res.status(400).json({ error: 'Uma ou mais mensagens selecionadas são inválidas' });
+    }
+
+    const mainMessageId = finalMessageIds[0];
 
     const result = await query(
       `INSERT INTO campaigns 
-       (user_id, name, connection_id, list_id, message_id, scheduled_at, end_at, min_delay, max_delay)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+       (user_id, name, connection_id, list_id, message_id, message_ids, scheduled_at, end_at, min_delay, max_delay)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
        RETURNING *`,
       [
         req.userId, 
         name, 
         connection_id, 
         list_id, 
-        message_id, 
+        mainMessageId,
+        JSON.stringify(finalMessageIds),
         scheduled_at || null,
         end_at || null,
         min_delay || 90,
