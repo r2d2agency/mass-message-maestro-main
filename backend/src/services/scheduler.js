@@ -116,13 +116,14 @@ export const scheduleCampaign = async (campaignId) => {
     if (minDelay < 1) minDelay = 1;
     if (maxDelay <= minDelay) maxDelay = minDelay + 1;
 
-    const batchSize = 20;
     const pauseSeconds = 600; // 10 minutes
 
+    // Random batch size between 30 and 50
+    let currentBatchLimit = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
     let messagesInBatch = 0;
 
     console.log(
-      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${minDelay}-${maxDelay}s and 10min pause every ${batchSize} messages (Business Hours 08-18h)`
+      `Scheduling ${contacts.length} messages starting at ${nextTime.toISOString()} with delay ${minDelay}-${maxDelay}s and 10min pause every 30-50 messages (Business Hours 08-18h)`
     );
 
     const INSERT_BATCH_SIZE = 500;
@@ -141,11 +142,13 @@ export const scheduleCampaign = async (campaignId) => {
       messagesInBatch += 1;
       
       // Check batch limit for pauses
-      if (messagesInBatch >= batchSize) {
+      if (messagesInBatch >= currentBatchLimit) {
         // Add pause
         nextTime = new Date(nextTime.getTime() + pauseSeconds * 1000);
         nextTime = adjustToBusinessHours(nextTime);
         messagesInBatch = 0;
+        // New random limit for next batch
+        currentBatchLimit = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
       }
 
       currentBatch.push({

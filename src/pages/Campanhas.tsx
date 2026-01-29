@@ -44,9 +44,12 @@ import {
   MessageSquare,
   Shuffle,
   Pencil,
+  Download,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { uploadFile, API_URL } from "@/lib/api";
 
 const SETTINGS_STORAGE_KEY = "app_settings";
 
@@ -66,6 +69,7 @@ interface Campaign {
   messageName?: string;
   totalContacts: number;
   sentMessages: number;
+  failedMessages?: number;
   scheduledAt?: string;
   connectionId: string;
   listId: string;
@@ -100,9 +104,9 @@ interface ApiCampaign {
   connection_id: string;
   list_id: string;
   message_id: string;
-  sent_count: number;
-  failed_count: number;
   created_at: string;
+  sent_count?: number;
+  failed_count?: number;
 }
 
 interface ApiSendLog {
@@ -189,6 +193,7 @@ const Campanhas = () => {
   const [minDelayInput, setMinDelayInput] = useState("30");
   const [maxDelayInput, setMaxDelayInput] = useState("120");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
   const [connections, setConnections] = useState<ApiConnection[]>([]);
   const [lists, setLists] = useState<ApiContactList[]>([]);
@@ -235,6 +240,7 @@ const Campanhas = () => {
             messageName: campaign.message_name,
             totalContacts: total,
             sentMessages: sent,
+            failedMessages: failed,
             scheduledAt,
             connectionId: campaign.connection_id,
             listId: campaign.list_id,
@@ -484,6 +490,34 @@ const Campanhas = () => {
     }
   };
 
+  const handleExport = async (id: string) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${API_URL}/api/campaigns/${id}/export`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Erro ao exportar');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `campaign-${id}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: "Exportação concluída" });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Erro ao exportar", variant: "destructive" });
+    }
+  };
+
   const handleUpdateCampaignStatus = async (
     campaignId: string,
     status: ApiCampaign["status"]
@@ -549,12 +583,29 @@ const Campanhas = () => {
     }
   };
 
+  const resetForm = () => {
+    setEditingCampaignId(null);
+    setCampaignName("");
+    setSelectedConnectionId("");
+    setSelectedListId("");
+    setSelectedMessageId("");
+    setStartDate(undefined);
+    setEndDate(undefined);
+    setStartTime("08:00");
+    setEndTime("18:00");
+    setMinDelayInput("30");
+    setMaxDelayInput("120");
+  };
+
   const handleEditCampaign = (campaign: Campaign) => {
     setEditingCampaignId(campaign.id);
     setCampaignName(campaign.name);
     setSelectedConnectionId(campaign.connectionId);
     setSelectedListId(campaign.listId);
     setSelectedMessageId(campaign.messageId);
+    
+    if (campaign.minDelay) setMinDelayInput(campaign.minDelay.toString());
+    if (campaign.maxDelay) setMaxDelayInput(campaign.maxDelay.toString());
 
     if (campaign.scheduledAtRaw) {
       const start = new Date(campaign.scheduledAtRaw);
@@ -630,6 +681,14 @@ const Campanhas = () => {
     }
   };
 
+  const filteredCampaigns = campaigns.filter((campaign) => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "error") {
+      return (campaign.failedMessages || 0) > 0;
+    }
+    return campaign.status === statusFilter;
+  });
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -641,7 +700,10 @@ const Campanhas = () => {
               Gerencie e acompanhe seus disparos de mensagens
             </p>
           </div>
-          <Button variant="gradient" onClick={() => setActiveTab("create")}>
+          <Button variant="gradient" onClick={() => {
+            resetForm();
+            setActiveTab("create");
+          }}>
             <Plus className="h-4 w-4" />
             Nova Campanha
           </Button>
@@ -657,6 +719,24 @@ const Campanhas = () => {
           </TabsList>
 
           <TabsContent value="list" className="space-y-4 mt-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Filtrar por status:</span>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="running">Em Execução</SelectItem>
+                  <SelectItem value="paused">Pausadas</SelectItem>
+                  <SelectItem value="completed">Concluídas</SelectItem>
+                  <SelectItem value="error">Com Erros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {isLoadingCampaigns && campaigns.length === 0 && (
               <Card className="animate-fade-in shadow-card">
                 <CardContent className="p-6">
@@ -664,7 +744,7 @@ const Campanhas = () => {
                 </CardContent>
               </Card>
             )}
-            {campaigns.map((campaign, index) => {
+            {filteredCampaigns.map((campaign, index) => {
               const config = statusConfig[campaign.status];
               const StatusIcon = config.icon;
               const progress =
@@ -705,6 +785,12 @@ const Campanhas = () => {
                               {campaign.scheduledAt}
                             </span>
                           )}
+                          {campaign.failedMessages !== undefined && campaign.failedMessages > 0 && (
+                             <span className="flex items-center gap-1 text-red-500 font-medium">
+                               <AlertCircle className="h-4 w-4" />
+                               {campaign.failedMessages} falhas
+                             </span>
+                          )}
                         </div>
                       </div>
 
@@ -716,6 +802,14 @@ const Campanhas = () => {
                           <p className="text-sm text-muted-foreground">mensagens enviadas</p>
                         </div>
                         <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExport(campaign.id)}
+                            title="Exportar Lista"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

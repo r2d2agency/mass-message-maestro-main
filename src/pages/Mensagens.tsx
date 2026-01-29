@@ -20,7 +20,7 @@ import {
 import { MessageItemEditor, MessageItem, MessageItemType } from "@/components/mensagens/MessageItemEditor";
 import { AddMessageButton } from "@/components/mensagens/AddMessageButton";
 import { MessagePreview } from "@/components/mensagens/MessagePreview";
-import { api } from "@/lib/api";
+import { api, uploadFile } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface SavedMessage {
@@ -197,6 +197,56 @@ const Mensagens = () => {
     );
     return counts;
   };
+
+  const handleGalleryUpload = async (files: FileList) => {
+    try {
+      // Don't set full loading state to avoid blocking UI completely, 
+      // but maybe show a toast or local loading indicator?
+      // For now, let's just use toast to indicate start
+      toast({ title: "Enviando imagens...", description: `Processando ${files.length} arquivos.` });
+
+      const newItems: MessageItem[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const response = await uploadFile<{ url: string }>("/api/messages/upload", file);
+          
+          newItems.push({
+            id: crypto.randomUUID(),
+            type: "image",
+            content: "",
+            mediaUrl: response.url,
+            caption: ""
+          });
+        } catch (error) {
+          console.error(`Erro ao enviar arquivo ${file.name}:`, error);
+          toast({
+            title: `Erro ao enviar ${file.name}`,
+            description: "Não foi possível enviar esta imagem.",
+            variant: "destructive"
+          });
+        }
+      }
+
+      if (newItems.length > 0) {
+        setMessageItems(prev => [...prev, ...newItems]);
+        toast({
+          title: "Galeria adicionada",
+          description: `${newItems.length} imagens foram adicionadas com sucesso.`
+        });
+      }
+
+    } catch (error) {
+      console.error("Erro no upload da galeria:", error);
+      toast({
+        title: "Erro no upload",
+        description: "Falha ao processar galeria.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleDragStart = (index: number) => {
     setDraggingIndex(index);
   };
@@ -391,7 +441,7 @@ const Mensagens = () => {
                       ))}
                     </div>
 
-                    <AddMessageButton onAdd={addMessageItem} />
+                    <AddMessageButton onAdd={addMessageItem} onGalleryUpload={handleGalleryUpload} />
                   </div>
 
                   <Button
