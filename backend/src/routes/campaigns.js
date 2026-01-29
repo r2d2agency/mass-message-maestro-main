@@ -306,4 +306,79 @@ router.get('/:id/export', async (req, res) => {
   }
 });
 
+// Get campaign logs
+router.get('/:id/logs', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const campaign = await query(
+      `SELECT id FROM campaigns 
+       WHERE id = $1 
+       AND user_id IN (
+         SELECT id FROM users WHERE id = $2 OR manager_id = $2
+       )`,
+      [id, req.userId]
+    );
+
+    if (campaign.rows.length === 0) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    const result = await query(
+      `SELECT 
+         cm.id, 
+         ct.name as "contactName", 
+         ct.phone, 
+         cm.status, 
+         cm.error_message as "errorMessage", 
+         cm.scheduled_for as "scheduledAt", 
+         cm.sent_at as "sentAt"
+       FROM campaign_messages cm
+       LEFT JOIN contacts ct ON cm.contact_id = ct.id
+       WHERE cm.campaign_id = $1
+       ORDER BY cm.scheduled_for ASC, cm.created_at ASC
+       LIMIT 1000`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get campaign logs error:', error);
+    res.status(500).json({ error: 'Erro ao buscar logs da campanha' });
+  }
+});
+
+// Delete campaign
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // First check if campaign exists and belongs to user
+    const campaign = await query(
+      'SELECT status FROM campaigns WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+
+    if (campaign.rows.length === 0) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    // Optional: Prevent deleting running campaigns
+    if (campaign.rows[0].status === 'running') {
+      return res.status(400).json({ error: 'Não é possível excluir uma campanha em execução' });
+    }
+
+    // Delete related messages first (cascade should handle this if configured, but explicit is safer)
+    await query('DELETE FROM campaign_messages WHERE campaign_id = $1', [id]);
+    
+    // Delete campaign
+    await query('DELETE FROM campaigns WHERE id = $1', [id]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete campaign error:', error);
+    res.status(500).json({ error: 'Erro ao deletar campanha' });
+  }
+});
+
 export default router;
