@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
@@ -104,6 +105,22 @@ async function ensureSchemaUpdates() {
         ADD COLUMN IF NOT EXISTS is_whatsapp BOOLEAN DEFAULT NULL;
       `);
       console.log('Contact validation schema updates applied successfully.');
+    }
+
+    // Check for active column in contacts
+    const checkActiveCol = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='contacts' AND column_name='active'
+    `);
+    
+    if (checkActiveCol.rows.length === 0) {
+      console.log('Applying schema updates for contact active status...');
+      await query(`
+        ALTER TABLE contacts 
+        ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE;
+      `);
+      console.log('Contact active status schema updates applied successfully.');
     }
   } catch (error) {
     console.error('Error applying schema updates:', error);

@@ -100,8 +100,8 @@ export const scheduleCampaign = async (campaignId) => {
         return;
     }
 
-    // 2. Get contacts
-    const contactsRes = await query('SELECT * FROM contacts WHERE list_id = $1', [campaign.list_id]);
+    // 2. Get contacts (only active ones)
+    const contactsRes = await query('SELECT * FROM contacts WHERE list_id = $1 AND active = TRUE', [campaign.list_id]);
     let contacts = contactsRes.rows;
     
     if (contacts.length === 0) {

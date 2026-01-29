@@ -28,7 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2, Pencil } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2, Pencil, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
@@ -46,6 +47,7 @@ interface Contact {
   phone: string;
   listId: string;
   isWhatsapp?: boolean | null;
+  active?: boolean;
 }
 
 interface ApiContactList {
@@ -61,6 +63,12 @@ interface ApiContact {
   phone: string;
   list_id: string;
   is_whatsapp?: boolean | null;
+  active?: boolean;
+}
+
+interface GlobalDuplicate {
+  phone: string;
+  lists: string[];
 }
 
 interface ImportResult {
@@ -69,6 +77,7 @@ interface ImportResult {
   imported: number;
   totalWhatsapp: number;
   totalErrors: number;
+  globalDuplicates?: GlobalDuplicate[];
 }
 
 interface CsvColumnPreview {
@@ -140,6 +149,7 @@ const Contatos = () => {
             phone: contact.phone,
             listId: contact.list_id,
             isWhatsapp: contact.is_whatsapp,
+            active: contact.active !== undefined ? contact.active : true,
           }))
         );
       } catch (error) {
@@ -362,6 +372,7 @@ const Contatos = () => {
           phone: contact.phone,
           listId: contact.list_id,
           isWhatsapp: contact.is_whatsapp,
+          active: contact.active !== undefined ? contact.active : true,
         }));
         return [...otherContacts, ...newContacts];
       });
@@ -374,6 +385,34 @@ const Contatos = () => {
       });
     } finally {
       setIsValidating(false);
+    }
+  };
+
+  const handleToggleActive = async (contact: Contact, checked: boolean) => {
+    // Optimistic update
+    setContacts((prev) =>
+      prev.map((c) =>
+        c.id === contact.id ? { ...c, active: checked } : c
+      )
+    );
+
+    try {
+      await api(`/api/contacts/${contact.id}`, {
+        method: "PATCH",
+        body: { active: checked },
+      });
+    } catch (error) {
+      // Revert on error
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contact.id ? { ...c, active: !checked } : c
+        )
+      );
+      toast({
+        title: "Erro ao atualizar status",
+        description: "Não foi possível alterar o status do contato.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -625,7 +664,8 @@ const Contatos = () => {
         total: 0,
         imported: 0,
         totalWhatsapp: 0,
-        totalErrors: 0
+        totalErrors: 0,
+        globalDuplicates: []
       };
 
       for (let i = 0; i < totalContacts; i += CHUNK_SIZE) {
@@ -644,6 +684,13 @@ const Contatos = () => {
           accumulatedResult.imported += chunkResponse.imported;
           accumulatedResult.totalWhatsapp += chunkResponse.totalWhatsapp;
           accumulatedResult.totalErrors += chunkResponse.totalErrors;
+          
+          if (chunkResponse.globalDuplicates && chunkResponse.globalDuplicates.length > 0) {
+            accumulatedResult.globalDuplicates = [
+              ...(accumulatedResult.globalDuplicates || []),
+              ...chunkResponse.globalDuplicates
+            ];
+          }
         } catch (err) {
           console.error(`Error importing chunk ${i}:`, err);
           accumulatedResult.totalErrors += chunk.length;
@@ -687,6 +734,7 @@ const Contatos = () => {
             name: contact.name,
             phone: contact.phone,
             listId: contact.list_id,
+            active: contact.active !== undefined ? contact.active : true,
           })),
         ]);
       }
@@ -1057,6 +1105,18 @@ const Contatos = () => {
                       <p>
                         <strong>Total com erros:</strong> {importResult.totalErrors}
                       </p>
+                      {importResult.globalDuplicates && importResult.globalDuplicates.length > 0 && (
+                        <div className="mt-2 p-2 bg-yellow-50 rounded-md border border-yellow-200">
+                          <p className="font-semibold text-yellow-800 mb-1">Atenção: Duplicatas em outras listas</p>
+                          <div className="max-h-24 overflow-y-auto text-xs text-yellow-700">
+                            {importResult.globalDuplicates.map((dup, idx) => (
+                              <div key={idx} className="mb-0.5">
+                                <span className="font-medium">{dup.phone}</span>: já existe em {dup.lists.join(", ")}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1178,6 +1238,7 @@ const Contatos = () => {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Telefone</TableHead>
+                    <TableHead>Ativo</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Lista</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -1188,6 +1249,12 @@ const Contatos = () => {
                     <TableRow key={contact.id}>
                       <TableCell className="font-medium">{contact.name}</TableCell>
                       <TableCell>{contact.phone}</TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={contact.active !== false}
+                          onCheckedChange={(checked) => handleToggleActive(contact, checked)}
+                        />
+                      </TableCell>
                       <TableCell>
                         {contact.isWhatsapp === true && (
                           <Badge variant="outline" className="border-green-500 text-green-600 bg-green-50">

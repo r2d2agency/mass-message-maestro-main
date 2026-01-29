@@ -258,14 +258,14 @@ router.post('/lists/:listId/contacts', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone } = req.body;
+    const { name, phone, active } = req.body;
 
-    if (!name && !phone) {
+    if (!name && !phone && active === undefined) {
       return res.status(400).json({ error: 'Nada para atualizar' });
     }
 
     const contactResult = await query(
-      `SELECT c.id, c.list_id, c.phone
+      `SELECT c.id, c.list_id, c.phone, c.name, c.active
        FROM contacts c
        JOIN contact_lists cl ON c.list_id = cl.id
        WHERE c.id = $1 AND cl.user_id = $2`,
@@ -279,6 +279,7 @@ router.patch('/:id', async (req, res) => {
     const current = contactResult.rows[0];
     let newName = name;
     let newPhone = phone;
+    let newActive = active !== undefined ? active : current.active;
 
     if (typeof newName === 'string') {
       newName = newName.trim();
@@ -305,98 +306,20 @@ router.patch('/:id', async (req, res) => {
       );
 
       if (duplicateCheck.rows.length > 0) {
-        return res.status(400).json({ error: 'Já existe um contato com este número na lista' });
-      }
-
-      const connectionResult = await query(
-        `SELECT api_url, api_key, instance_name
-         FROM connections
-         WHERE user_id = $1
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [req.userId]
-      );
-
-      if (connectionResult.rows.length === 0) {
-        return res.status(400).json({
-          error: 'Configure uma conexão Evolution antes de atualizar contatos',
-        });
-      }
-
-      const { api_url, api_key, instance_name } = connectionResult.rows[0];
-
-      let isWhatsapp = false;
-
-      try {
-        const evoResponse = await fetch(
-          `${api_url}/chat/whatsappNumbers/${instance_name}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: api_key,
-            },
-            body: JSON.stringify({ numbers: [digits] }),
-          }
-        );
-
-        if (!evoResponse.ok) {
-          console.error('Evolution whatsappNumbers error status (update):', evoResponse.status);
-          return res.status(502).json({
-            error: 'Não foi possível validar o número com a Evolution API',
-          });
-        }
-
-        const evoData = await evoResponse.json();
-
-        const resultsArray = Array.isArray(evoData)
-          ? evoData
-          : Array.isArray(evoData.numbers)
-          ? evoData.numbers
-          : Array.isArray(evoData.result)
-          ? evoData.result
-          : Array.isArray(evoData.response)
-          ? evoData.response
-          : [];
-
-        for (const item of resultsArray) {
-          const num = (item.number || item.phone || '').toString().replace(/\D/g, '');
-          const exists =
-            item.exists === true ||
-            item.isWhatsapp === true ||
-            item.is_whatsapp === true ||
-            item.isWhatsApp === true;
-
-          if (num === digits && exists) {
-            isWhatsapp = true;
-            break;
-          }
-        }
-      } catch (err) {
-        console.error('Evolution whatsappNumbers request failed (update):', err);
-        return res.status(502).json({
-          error: 'Não foi possível validar o número com a Evolution API',
-        });
-      }
-
-      if (!isWhatsapp) {
-        return res.status(400).json({ error: 'Número não é WhatsApp válido' });
+        return res.status(400).json({ error: 'Este número já existe nesta lista' });
       }
 
       normalizedPhone = digits;
     }
 
-    const result = await query(
+    await query(
       `UPDATE contacts 
-       SET name = COALESCE($1, name),
-           phone = COALESCE($2, phone),
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
-      [newName || null, newPhone ? normalizedPhone : null, id]
+       SET name = $1, phone = $2, active = $3, updated_at = NOW() 
+       WHERE id = $4`,
+      [newName || current.name, normalizedPhone, newActive, id]
     );
 
-    res.json(result.rows[0]);
+    res.json({ success: true });
   } catch (error) {
     console.error('Update contact error:', error);
     res.status(500).json({ error: 'Erro ao atualizar contato' });
@@ -448,14 +371,45 @@ router.post('/lists/:listId/import', async (req, res) => {
     
     const existingPhones = new Set(existingPhonesResult.rows.map(row => row.phone));
     
-    // Filter out duplicates from candidates
-    candidates = candidates.filter(c => !existingPhones.has(c.normalizedPhone));
-    const uniqueCandidates = candidates;
+    // Filter out duplicates from candidates (current list)
+    const newContacts = candidates.filter(c => !existingPhones.has(c.normalizedPhone));
+    const currentListDuplicatesCount = candidates.length - newContacts.length;
+
+    // GLOBAL DUPLICATE CHECK: Check if new contacts exist in other lists
+    let globalDuplicates = [];
+    const newContactPhones = newContacts.map(c => c.normalizedPhone);
+
+    if (newContactPhones.length > 0) {
+      const globalCheckResult = await query(
+        `SELECT c.phone, cl.name as list_name 
+         FROM contacts c
+         JOIN contact_lists cl ON c.list_id = cl.id
+         WHERE cl.user_id = $1 AND c.phone = ANY($2) AND c.list_id != $3`,
+        [req.userId, newContactPhones, listId]
+      );
+
+      // Group by phone
+      const duplicatesMap = {};
+      globalCheckResult.rows.forEach(row => {
+        if (!duplicatesMap[row.phone]) {
+          duplicatesMap[row.phone] = new Set();
+        }
+        duplicatesMap[row.phone].add(row.list_name);
+      });
+
+      globalDuplicates = Object.keys(duplicatesMap).map(phone => ({
+        phone,
+        lists: Array.from(duplicatesMap[phone])
+      }));
+    }
 
     const total = rawContacts.length;
-    let totalErrors = total - candidates.length;
+    // totalErrors here includes invalid formats + duplicates in current list
+    // But usually totalErrors implies "failed to import". 
+    // Duplicates in current list are technically "failed to import" as new.
+    let totalErrors = total - newContacts.length;
 
-    if (candidates.length === 0) {
+    if (newContacts.length === 0) {
       // If all were duplicates or invalid
       return res.status(200).json({
         success: true,
@@ -463,23 +417,17 @@ router.post('/lists/:listId/import', async (req, res) => {
         imported: 0,
         totalWhatsapp: 0,
         totalErrors,
+        duplicates: currentListDuplicatesCount,
+        globalDuplicates,
         message: 'Nenhum contato novo ou válido para importar.'
       });
     }
 
-    // Use user's latest Evolution connection to validate numbers (Optional - skipping for speed)
-    // The user requested to validate AFTER import. So we just import everything here.
-    
-    const validContacts = [];
-    let duplicates = candidates.length - uniqueCandidates.length;
-
-    for (const c of uniqueCandidates) {
-      // Just accept all unique candidates
-      validContacts.push({
-        name: c.name,
-        phone: c.normalizedPhone,
-      });
-    }
+    // Prepare for insertion
+    const validContacts = newContacts.map(c => ({
+      name: c.name,
+      phone: c.normalizedPhone,
+    }));
 
     const imported = validContacts.length;
 
@@ -501,9 +449,10 @@ router.post('/lists/:listId/import', async (req, res) => {
       success: true,
       total,
       imported,
-      totalWhatsapp: 0, // Not checking anymore
-      totalErrors: 0, // Not checking anymore
-      duplicates,
+      totalWhatsapp: 0,
+      totalErrors, 
+      duplicates: currentListDuplicatesCount,
+      globalDuplicates,
       message: 'Contatos importados com sucesso. Use a opção "Validar" para verificar quais possuem WhatsApp.'
     });
   } catch (error) {
