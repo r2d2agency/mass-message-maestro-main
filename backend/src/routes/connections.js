@@ -104,12 +104,15 @@ router.post('/:id/test', async (req, res) => {
       return res.status(400).json({ error: 'Telefone de destino é obrigatório' });
     }
 
+    // Clean phone number (remove non-digits)
+    const cleanPhone = phone.replace(/\D/g, '');
+
     const connectionRes = await query(
       `SELECT * FROM connections 
        WHERE id = $1 
-         AND user_id IN (
-           SELECT id FROM users WHERE id = $2 OR manager_id = $2
-         )`,
+       AND user_id IN (
+         SELECT id FROM users WHERE id = $2 OR manager_id = $2
+       )`,
       [id, req.userId]
     );
 
@@ -129,20 +132,25 @@ router.post('/:id/test', async (req, res) => {
     if (mediaUrl) {
       endpoint = `${apiUrl}/message/sendMedia/${instanceName}`;
       payload = {
-        number: phone,
+        number: cleanPhone,
         mediatype: mediaType || 'image',
         media: mediaUrl,
         caption: text || '',
+        delay: 1200,
       };
     } else {
       payload = {
-        number: phone,
+        number: cleanPhone,
         text:
           typeof text === 'string' && text.trim().length > 0
             ? text
             : 'Mensagem de teste enviada pelo Blaster para validar sua conexão.',
+        delay: 1200,
+        linkPreview: false,
       };
     }
+
+    console.log(`Sending test message to ${cleanPhone} via ${endpoint}`);
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -154,11 +162,23 @@ router.post('/:id/test', async (req, res) => {
     });
 
     const bodyText = await response.text().catch(() => '');
+    
+    // Try to parse JSON error for better details
+    let errorDetails = bodyText;
+    try {
+      const jsonBody = JSON.parse(bodyText);
+      if (jsonBody.response?.message) errorDetails = jsonBody.response.message;
+      else if (jsonBody.message) errorDetails = jsonBody.message;
+      else if (jsonBody.error) errorDetails = jsonBody.error;
+    } catch (e) {
+      // ignore
+    }
 
     if (!response.ok) {
+      console.error(`Evolution API Error (${response.status}):`, bodyText);
       return res.status(response.status).json({
-        error: 'Erro ao enviar mensagem de teste',
-        details: bodyText || `Evolution API error (${response.status})`,
+        error: `Erro ao enviar: ${errorDetails || response.statusText || 'Falha na API'}`,
+        details: errorDetails || `Evolution API error (${response.status})`,
       });
     }
 
