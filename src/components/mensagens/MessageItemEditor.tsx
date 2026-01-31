@@ -263,7 +263,11 @@ export function MessageItemEditor({
                   onClick={handleUploadClick}
                   disabled={isUploading}
                 >
-                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
                   {isUploading
                     ? "Enviando..."
                     : item.mediaUrl
@@ -278,10 +282,19 @@ export function MessageItemEditor({
                   onClick={handleUploadClick}
                   disabled={isUploading}
                 >
-                  <Upload className="h-4 w-4" />
+                  {isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
                 </Button>
               )}
             </div>
+            {isUploading && (
+              <p className="text-xs text-muted-foreground animate-pulse">
+                Carregando mídia, por favor aguarde...
+              </p>
+            )}
           </div>
 
           {item.type === "audio" && (
