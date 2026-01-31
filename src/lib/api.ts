@@ -1,4 +1,4 @@
-export const API_URL = 'https://blaster-blasterback.isyhhh.easypanel.host';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://blaster-blasterback.isyhhh.easypanel.host';
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
