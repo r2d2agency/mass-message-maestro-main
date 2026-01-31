@@ -129,6 +129,20 @@ const Mensagens = () => {
       return;
     }
 
+    const invalidItems = messageItems.filter(item => 
+      (item.type !== 'text' && !item.mediaUrl) || 
+      (item.type === 'text' && !item.content.trim())
+    );
+
+    if (invalidItems.length > 0) {
+      toast({
+        title: "Preencha todos os campos",
+        description: "Existem itens vazios ou sem mídia carregada. Aguarde o upload ou preencha o texto.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       setIsSaving(true);
       let saved: ApiMessage;

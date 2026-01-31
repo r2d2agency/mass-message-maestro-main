@@ -64,7 +64,9 @@ router.post('/upload', upload.single('file'), (req, res) => {
       url = `${protocol}://${host}/api/uploads/media/${req.file.filename}`;
     }
 
-    res.json({ url });
+    console.log('File uploaded:', req.file.filename, 'URL:', url);
+
+    res.json({ url, filename: req.file.filename });
   } catch (error) {
     console.error('Upload media error:', error);
     res.status(500).json({ error: 'Erro ao enviar arquivo' });

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFile } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export type MessageItemType = "text" | "image" | "video" | "audio";
 
@@ -152,9 +153,18 @@ export function MessageItemEditor({
           const response = await uploadFile<{ url: string }>("/api/messages/upload", file);
           if (response.url) {
             onUpdate(item.id, { mediaUrl: response.url });
+            toast({
+              title: "Áudio gravado",
+              description: "Áudio enviado com sucesso",
+            });
           }
         } catch (error) {
           console.error("Erro ao enviar áudio gravado", error);
+          toast({
+            title: "Erro no upload do áudio",
+            description: "Não foi possível enviar a gravação.",
+            variant: "destructive",
+          });
         } finally {
           setIsUploading(false);
         }
