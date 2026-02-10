@@ -75,23 +75,6 @@ const resolveMediaForEvolution = (mediaUrl) => {
   return { media: mediaUrl }; 
 };
 
-  // Se for um caminho relativo que começa com /api/uploads, tentamos construir a URL completa
-  // Isso é um fallback caso o banco tenha salvo apenas o caminho relativo
-  if (mediaUrl.startsWith('/api/uploads/')) {
-     // Tenta usar PUBLIC_URL do .env
-     if (process.env.PUBLIC_URL) {
-        const baseUrl = process.env.PUBLIC_URL.replace(/\/$/, '');
-        const fullUrl = `${baseUrl}${mediaUrl}`;
-        console.log(`Converted relative path to full URL: ${fullUrl}`);
-        return { media: fullUrl };
-     }
-  }
-
-  // Se não for URL válida, avisamos
-  console.warn(`Media URL format not recognized as absolute URL: ${mediaUrl}`);
-  return { media: mediaUrl }; // Tenta enviar assim mesmo, mas provavelmente falhará se não for URL
-};
-
 const buildMessagesFromTemplate = (items, contactName) => {
   if (!items || !Array.isArray(items)) return [];
 
