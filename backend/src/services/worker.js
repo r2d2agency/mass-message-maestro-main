@@ -19,12 +19,15 @@ const resolveMediaForEvolution = (mediaUrl) => {
     if (mediaUrl.includes('/api/uploads/')) {
        const parts = mediaUrl.split('/api/uploads/');
        if (parts.length > 1) {
-         relativePath = parts[1]; // ex: "media/video.mp4"
+         relativePath = decodeURIComponent(parts[1]); // ex: "media/video.mp4"
        }
     }
 
     if (relativePath) {
       const filePath = path.join(uploadsPath, relativePath);
+      
+      console.log(`Checking local file path: ${filePath}`);
+      
       if (fs.existsSync(filePath)) {
          console.log(`Found local file for media: ${filePath}`);
          const fileBuffer = fs.readFileSync(filePath);
@@ -44,6 +47,24 @@ const resolveMediaForEvolution = (mediaUrl) => {
            mimetype: mime,
            fileName: path.basename(filePath)
          };
+      } else {
+         console.warn(`Local file NOT found at: ${filePath}`);
+         // Debug: List directory contents to help identify path issues
+         try {
+            const dir = path.dirname(filePath);
+            if (fs.existsSync(dir)) {
+                const files = fs.readdirSync(dir);
+                console.log(`Contents of ${dir}:`, files.slice(0, 10)); // Show first 10 files
+            } else {
+                console.warn(`Directory does not exist: ${dir}`);
+                console.log(`Uploads root path is: ${uploadsPath}`);
+                if (fs.existsSync(uploadsPath)) {
+                    console.log(`Contents of uploads root:`, fs.readdirSync(uploadsPath));
+                }
+            }
+         } catch (e) {
+            console.error('Error listing directory:', e);
+         }
       }
     }
   } catch (err) {
