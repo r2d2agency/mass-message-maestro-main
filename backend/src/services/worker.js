@@ -13,6 +13,43 @@ const resolveMediaForEvolution = (mediaUrl) => {
   // Log para depuração
   console.log(`Resolving media for Evolution: ${mediaUrl}`);
 
+  // Tentar encontrar arquivo localmente primeiro para evitar erros de rede (404)
+  try {
+    let relativePath = '';
+    if (mediaUrl.includes('/api/uploads/')) {
+       const parts = mediaUrl.split('/api/uploads/');
+       if (parts.length > 1) {
+         relativePath = parts[1]; // ex: "media/video.mp4"
+       }
+    }
+
+    if (relativePath) {
+      const filePath = path.join(uploadsPath, relativePath);
+      if (fs.existsSync(filePath)) {
+         console.log(`Found local file for media: ${filePath}`);
+         const fileBuffer = fs.readFileSync(filePath);
+         const base64 = fileBuffer.toString('base64');
+         const ext = path.extname(filePath).toLowerCase();
+         
+         let mime = 'application/octet-stream';
+         if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+         else if (ext === '.png') mime = 'image/png';
+         else if (ext === '.mp4') mime = 'video/mp4';
+         else if (ext === '.mp3') mime = 'audio/mpeg';
+         else if (ext === '.ogg') mime = 'audio/ogg';
+         else if (ext === '.pdf') mime = 'application/pdf';
+         
+         return {
+           media: base64,
+           mimetype: mime,
+           fileName: path.basename(filePath)
+         };
+      }
+    }
+  } catch (err) {
+    console.error('Error resolving local media:', err);
+  }
+
   // Se já for uma URL completa (http/https), enviamos direto (igual ao teste de conexão)
   if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
     return { media: mediaUrl };
