@@ -13,6 +13,11 @@ const resolveMediaForEvolution = (mediaUrl) => {
   // Log para depuração
   console.log(`Resolving media for Evolution: ${mediaUrl}`);
 
+  // Se já for uma URL completa (http/https), enviamos direto (igual ao teste de conexão)
+  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+    return { media: mediaUrl };
+  }
+
   // Tentar encontrar arquivo localmente primeiro para evitar erros de rede (404)
   try {
     let relativePath = '';
@@ -30,6 +35,17 @@ const resolveMediaForEvolution = (mediaUrl) => {
       
       if (fs.existsSync(filePath)) {
          console.log(`Found local file for media: ${filePath}`);
+         // Use the local file path but convert to public URL if possible, or use Base64 if needed
+         // The test connection uses public URL. Let's try to reconstruct the public URL if possible.
+         // If we are on the server, we might be able to use the same domain logic as the upload route.
+         
+         // However, the user said "test connection works". The test connection sends the URL directly if provided.
+         // If the user provided a URL in the test connection, it works.
+         // Here in the worker, we might have a relative path or a full URL that is not accessible by the Evolution API container.
+         
+         // If we found the file locally, converting to Base64 is the safest way to ensure Evolution API receives it,
+         // regardless of network visibility between containers.
+         
          const fileBuffer = fs.readFileSync(filePath);
          const base64 = fileBuffer.toString('base64');
          const ext = path.extname(filePath).toLowerCase();
@@ -49,32 +65,15 @@ const resolveMediaForEvolution = (mediaUrl) => {
          };
       } else {
          console.warn(`Local file NOT found at: ${filePath}`);
-         // Debug: List directory contents to help identify path issues
-         try {
-            const dir = path.dirname(filePath);
-            if (fs.existsSync(dir)) {
-                const files = fs.readdirSync(dir);
-                console.log(`Contents of ${dir}:`, files.slice(0, 10)); // Show first 10 files
-            } else {
-                console.warn(`Directory does not exist: ${dir}`);
-                console.log(`Uploads root path is: ${uploadsPath}`);
-                if (fs.existsSync(uploadsPath)) {
-                    console.log(`Contents of uploads root:`, fs.readdirSync(uploadsPath));
-                }
-            }
-         } catch (e) {
-            console.error('Error listing directory:', e);
-         }
+         // ... existing debug logs ...
       }
     }
   } catch (err) {
     console.error('Error resolving local media:', err);
   }
 
-  // Se já for uma URL completa (http/https), enviamos direto (igual ao teste de conexão)
-  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-    return { media: mediaUrl };
-  }
+  return { media: mediaUrl }; 
+};
 
   // Se for um caminho relativo que começa com /api/uploads, tentamos construir a URL completa
   // Isso é um fallback caso o banco tenha salvo apenas o caminho relativo
