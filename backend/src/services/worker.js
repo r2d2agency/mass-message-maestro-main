@@ -13,8 +13,11 @@ const resolveMediaForEvolution = (mediaUrl) => {
   // Log para depuração
   console.log(`Resolving media for Evolution: ${mediaUrl}`);
 
-  // Se já for uma URL completa (http/https), enviamos direto (igual ao teste de conexão)
-  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+  // Se for URL externa que NÃO seja do nosso próprio upload, envia direto
+  // Isso mantém a compatibilidade com URLs externas (ex: imagem da internet)
+  // mas força a resolução local para arquivos hospedados aqui mesmo para evitar erros de DNS/Rede (404)
+  if ((mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) && !mediaUrl.includes('/api/uploads/')) {
+    console.log('URL externa detectada, enviando diretamente:', mediaUrl);
     return { media: mediaUrl };
   }
 
