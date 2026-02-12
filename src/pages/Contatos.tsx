@@ -442,43 +442,13 @@ const Contatos = () => {
     }
   };
 
-  const handleExportList = () => {
+  const handleExportSelectedList = () => {
     if (!selectedList) return;
 
-    const listName = lists.find((l) => l.id === selectedList)?.name || "contatos";
-    const contactsToExport = contacts.filter((c) => c.listId === selectedList);
+    const list = lists.find((l) => l.id === selectedList);
+    if (!list) return;
 
-    if (contactsToExport.length === 0) {
-      toast({
-        title: "Lista vazia",
-        description: "Não há contatos para exportar nesta lista.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const dataToExport = contactsToExport.map((contact) => ({
-      Nome: contact.name,
-      Telefone: contact.phone,
-      Status:
-        contact.isWhatsapp === true
-          ? "WhatsApp"
-          : contact.isWhatsapp === false
-          ? "Inválido"
-          : "Pendente",
-      Ativo: contact.active ? "Sim" : "Não",
-      Envios: contact.sentCount || 0,
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Contatos");
-    XLSX.writeFile(workbook, `${listName}.xlsx`);
-
-    toast({
-      title: "Exportação concluída",
-      description: "O arquivo foi gerado com sucesso.",
-    });
+    handleExportList(list);
   };
 
   const handleToggleActive = async (contact: Contact, checked: boolean) => {
@@ -941,7 +911,7 @@ const Contatos = () => {
               <>
                 <Button
                   variant="outline"
-                  onClick={handleExportList}
+                  onClick={handleExportSelectedList}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Exportar
