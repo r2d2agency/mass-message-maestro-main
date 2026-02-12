@@ -99,6 +99,7 @@ interface ApiCreatedContact {
 
 const Contatos = () => {
   const [selectedList, setSelectedList] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"all" | "sent" | "not_sent">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
@@ -1311,14 +1312,28 @@ const Contatos = () => {
                   {filteredContacts.length} contatos encontrados
                 </CardDescription>
               </div>
-              <div className="relative w-full max-w-xs">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar contatos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+              <div className="flex flex-col md:flex-row gap-4 items-center w-full md:w-auto">
+                <div className="w-full md:w-[180px]">
+                  <Select value={filterStatus} onValueChange={(value: "all" | "sent" | "not_sent") => setFilterStatus(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filtrar por status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="sent">Enviados</SelectItem>
+                      <SelectItem value="not_sent">Não Enviados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="relative w-full md:w-[300px]">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar contatos..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
               </div>
             </div>
           </CardHeader>
