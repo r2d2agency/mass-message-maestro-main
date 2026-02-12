@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2, Pencil, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { Upload, Plus, Search, Users, FileSpreadsheet, Trash2, Eye, Loader2, Pencil, CheckCircle2, XCircle, HelpCircle, Download } from "lucide-react";
 import { api } from "@/lib/api";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,7 @@ interface Contact {
   listId: string;
   isWhatsapp?: boolean | null;
   active?: boolean;
+  sentCount?: number;
 }
 
 interface ApiContactList {
@@ -64,6 +65,7 @@ interface ApiContact {
   list_id: string;
   is_whatsapp?: boolean | null;
   active?: boolean;
+  sent_count?: number;
 }
 
 interface GlobalDuplicate {
@@ -122,6 +124,7 @@ const Contatos = () => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isUpdatingContact, setIsUpdatingContact] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [exportingListId, setExportingListId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -143,15 +146,16 @@ const Contatos = () => {
         );
 
         setContacts(
-          contactsData.map((contact) => ({
-            id: contact.id,
-            name: contact.name,
-            phone: contact.phone,
-            listId: contact.list_id,
-            isWhatsapp: contact.is_whatsapp,
-            active: contact.active !== undefined ? contact.active : true,
-          }))
-        );
+            contactsData.map((contact) => ({
+              id: contact.id,
+              name: contact.name,
+              phone: contact.phone,
+              listId: contact.list_id,
+              isWhatsapp: contact.is_whatsapp,
+              active: contact.active !== undefined ? contact.active : true,
+              sentCount: Number(contact.sent_count) || 0,
+            }))
+          );
       } catch (error) {
         toast({
           title: "Erro ao carregar contatos",
@@ -277,6 +281,56 @@ const Contatos = () => {
     }
   };
 
+  const handleExportList = async (list: ContactList) => {
+    try {
+      setExportingListId(list.id);
+      
+      const listContacts = contacts.filter(c => c.listId === list.id);
+
+      if (listContacts.length === 0) {
+        toast({
+          title: "Lista vazia",
+          description: "Não há contatos para exportar nesta lista.",
+          variant: "destructive",
+        });
+        setExportingListId(null);
+        return;
+      }
+
+      const exportData = listContacts.map(c => ({
+        Nome: c.name,
+        Telefone: c.phone,
+        Status: c.isWhatsapp === true ? 'WhatsApp' : (c.isWhatsapp === false ? 'Inválido' : 'Pendente'),
+        Ativo: c.active !== false ? 'Sim' : 'Não',
+        'Lista': list.name,
+        'Enviadas': c.sentCount || 0
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Contatos");
+      
+      const fileName = `${list.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      XLSX.writeFile(workbook, fileName);
+
+      toast({
+        title: "Exportação concluída",
+        description: `Arquivo ${fileName} gerado com sucesso.`
+      });
+
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "Erro ao exportar lista",
+        description: "Ocorreu um erro ao gerar o arquivo XLS.",
+        variant: "destructive"
+      });
+    } finally {
+      setExportingListId(null);
+    }
+  };
+
   const handleOpenEditContact = (contact: Contact) => {
     setEditingContact(contact);
     setNewContactName(contact.name);
@@ -386,6 +440,45 @@ const Contatos = () => {
     } finally {
       setIsValidating(false);
     }
+  };
+
+  const handleExportList = () => {
+    if (!selectedList) return;
+
+    const listName = lists.find((l) => l.id === selectedList)?.name || "contatos";
+    const contactsToExport = contacts.filter((c) => c.listId === selectedList);
+
+    if (contactsToExport.length === 0) {
+      toast({
+        title: "Lista vazia",
+        description: "Não há contatos para exportar nesta lista.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const dataToExport = contactsToExport.map((contact) => ({
+      Nome: contact.name,
+      Telefone: contact.phone,
+      Status:
+        contact.isWhatsapp === true
+          ? "WhatsApp"
+          : contact.isWhatsapp === false
+          ? "Inválido"
+          : "Pendente",
+      Ativo: contact.active ? "Sim" : "Não",
+      Envios: contact.sentCount || 0,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Contatos");
+    XLSX.writeFile(workbook, `${listName}.xlsx`);
+
+    toast({
+      title: "Exportação concluída",
+      description: "O arquivo foi gerado com sucesso.",
+    });
   };
 
   const handleToggleActive = async (contact: Contact, checked: boolean) => {
@@ -759,7 +852,10 @@ const Contatos = () => {
     (contact) =>
       (!selectedList || contact.listId === selectedList) &&
       (contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.phone.includes(searchTerm))
+        contact.phone.includes(searchTerm)) &&
+      (filterStatus === "all" ||
+        (filterStatus === "sent" && (contact.sentCount || 0) > 0) ||
+        (filterStatus === "not_sent" && (contact.sentCount || 0) === 0))
   );
 
   const handleCreateContact = async () => {
@@ -842,18 +938,27 @@ const Contatos = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {selectedList && (
-              <Button 
-                variant="outline" 
-                onClick={handleValidateList} 
-                disabled={isValidating}
-              >
-                {isValidating ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                )}
-                {isValidating ? "Validando..." : "Validar Lista"}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleExportList}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handleValidateList} 
+                  disabled={isValidating}
+                >
+                  {isValidating ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                  )}
+                  {isValidating ? "Validando..." : "Validar Lista"}
+                </Button>
+              </>
             )}
             <Dialog open={isListDialogOpen} onOpenChange={setIsListDialogOpen}>
               <DialogTrigger asChild>
@@ -1187,6 +1292,22 @@ const Contatos = () => {
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
+                      handleExportList(list);
+                    }}
+                    disabled={exportingListId === list.id}
+                    title="Exportar lista"
+                  >
+                    {exportingListId === list.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       handleOpenEditList(list);
                     }}
                   >
@@ -1249,6 +1370,11 @@ const Contatos = () => {
                     <TableRow key={contact.id}>
                       <TableCell className="font-medium">{contact.name}</TableCell>
                       <TableCell>{contact.phone}</TableCell>
+                      <TableCell>
+                        <Badge variant={contact.sentCount && contact.sentCount > 0 ? "default" : "secondary"}>
+                          {contact.sentCount && contact.sentCount > 0 ? `${contact.sentCount}` : "0"}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <Switch
                           checked={contact.active !== false}

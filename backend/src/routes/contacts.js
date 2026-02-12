@@ -9,9 +9,16 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const result = await query(
-      `SELECT c.*, cl.name as list_name
+      `SELECT c.*, cl.name as list_name, 
+       COALESCE(stats.sent_count, 0) as sent_count
        FROM contacts c
        JOIN contact_lists cl ON c.list_id = cl.id
+       LEFT JOIN (
+         SELECT contact_id, COUNT(*) as sent_count
+         FROM campaign_messages
+         WHERE status = 'sent'
+         GROUP BY contact_id
+       ) stats ON c.id = stats.contact_id
        WHERE cl.user_id = $1
        ORDER BY c.created_at DESC`,
       [req.userId]

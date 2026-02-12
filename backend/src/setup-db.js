@@ -63,6 +63,10 @@ const setupDb = async () => {
         WHERE message_id IS NOT NULL AND (message_ids IS NULL OR jsonb_array_length(message_ids) = 0);
       `);
 
+      // Add missing index on campaign_messages(contact_id) for performance
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_campaign_messages_contact_id ON campaign_messages(contact_id);');
+      console.log('Verified: performance indexes exist.');
+
     } catch (err) {
       console.warn('Manual check for schema updates failed:', err.message);
     }

@@ -152,41 +152,51 @@ router.post('/:id/test', async (req, res) => {
 
     console.log(`Sending test message to ${cleanPhone} via ${endpoint}`);
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
-    const bodyText = await response.text().catch(() => '');
-    
-    // Try to parse JSON error for better details
-    let errorDetails = bodyText;
     try {
-      const jsonBody = JSON.parse(bodyText);
-      if (jsonBody.response?.message) errorDetails = jsonBody.response.message;
-      else if (jsonBody.message) errorDetails = jsonBody.message;
-      else if (jsonBody.error) errorDetails = jsonBody.error;
-    } catch (e) {
-      // ignore
-    }
-
-    if (!response.ok) {
-      console.error(`Evolution API Error (${response.status}):`, bodyText);
-      return res.status(response.status).json({
-        error: `Erro ao enviar: ${errorDetails || response.statusText || 'Falha na API'}`,
-        details: errorDetails || `Evolution API error (${response.status})`,
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       });
-    }
+      clearTimeout(timeout);
 
-    res.json({
-      success: true,
-      message: 'Mensagem de teste enviada com sucesso',
-      rawResponse: bodyText || null,
-    });
+      const bodyText = await response.text().catch(() => '');
+      
+      // Try to parse JSON error for better details
+      let errorDetails = bodyText;
+      try {
+        const jsonBody = JSON.parse(bodyText);
+        if (jsonBody.response?.message) errorDetails = jsonBody.response.message;
+        else if (jsonBody.message) errorDetails = jsonBody.message;
+        else if (jsonBody.error) errorDetails = jsonBody.error;
+      } catch (e) {
+        // ignore
+      }
+
+      if (!response.ok) {
+        console.error(`Evolution API Error (${response.status}):`, bodyText);
+        return res.status(response.status).json({
+          error: `Erro ao enviar: ${errorDetails || response.statusText || 'Falha na API'}`,
+          details: errorDetails || `Evolution API error (${response.status})`,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Mensagem de teste enviada com sucesso',
+        rawResponse: bodyText || null,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      throw err;
+    }
   } catch (error) {
     console.error('Test connection error:', error);
     res.status(500).json({
