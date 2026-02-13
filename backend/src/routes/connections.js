@@ -182,6 +182,14 @@ router.post('/:id/test', async (req, res) => {
 
       if (!response.ok) {
         console.error(`Evolution API Error (${response.status}):`, bodyText);
+
+        if (response.status === 401) {
+          return res.status(401).json({
+            error: "Não autorizado (401). Verifique a API Key.",
+            details: "A API Key configurada é inválida ou não tem permissão para esta instância."
+          });
+        }
+
         return res.status(response.status).json({
           error: `Erro ao enviar: ${errorDetails || response.statusText || 'Falha na API'}`,
           details: errorDetails || `Evolution API error (${response.status})`,

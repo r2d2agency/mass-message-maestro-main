@@ -55,16 +55,19 @@ export const evolutionApi = {
 
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.includes("text/html")) {
-        console.error("API returned HTML instead of JSON. Check if the URL is correct.");
-        throw new Error("A URL da API parece incorreta (retornou HTML). Verifique a porta e o endereço.");
-      }
+      console.error("API returned HTML instead of JSON. Check if the URL is correct.");
+      throw new Error("A URL da API parece incorreta (retornou HTML). Verifique a porta e o endereço.");
+    }
 
-      if (!response.ok) {
-        if (response.status === 404) {
-           throw new Error("Instância não encontrada (404). Verifique o nome da instância.");
-        }
-        throw new Error(`Falha ao verificar status: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Não autorizado (401). Verifique sua API Key.");
       }
+      if (response.status === 404) {
+         throw new Error("Instância não encontrada (404). Verifique o nome da instância.");
+      }
+      throw new Error(`Falha ao verificar status: ${response.status} ${response.statusText}`);
+    }
 
       const data = await response.json();
       
