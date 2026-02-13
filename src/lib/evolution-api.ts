@@ -11,6 +11,7 @@ export interface ConnectionState {
   status: "connected" | "disconnected" | "connecting";
   phoneNumber?: string;
   qrCode?: string;
+  error?: string;
 }
 
 const STORAGE_KEY = "evolution_config";
@@ -40,8 +41,11 @@ export const evolutionApi = {
   // Verificar status da instância
   async checkInstanceStatus(config: EvolutionConfig): Promise<ConnectionState> {
     try {
+      const url = `${config.apiUrl}/instance/connectionState/${config.instanceName}`;
+      console.log("Checking status at:", url);
+
       const response = await fetch(
-        `${config.apiUrl}/instance/connectionState/${config.instanceName}`,
+        url,
         {
           headers: {
             apikey: config.apiKey,
@@ -49,8 +53,17 @@ export const evolutionApi = {
         }
       );
 
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("text/html")) {
+        console.error("API returned HTML instead of JSON. Check if the URL is correct.");
+        throw new Error("A URL da API parece incorreta (retornou HTML). Verifique a porta e o endereço.");
+      }
+
       if (!response.ok) {
-        throw new Error("Falha ao verificar status");
+        if (response.status === 404) {
+           throw new Error("Instância não encontrada (404). Verifique o nome da instância.");
+        }
+        throw new Error(`Falha ao verificar status: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -65,7 +78,10 @@ export const evolutionApi = {
       return { status: "disconnected" };
     } catch (error) {
       console.error("Erro ao verificar status:", error);
-      return { status: "disconnected" };
+      return { 
+        status: "disconnected", 
+        error: error instanceof Error ? error.message : "Erro desconhecido" 
+      };
     }
   },
 
@@ -80,6 +96,11 @@ export const evolutionApi = {
           },
         }
       );
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("text/html")) {
+        throw new Error("A URL da API retornou HTML. Verifique a configuração.");
+      }
 
       if (!response.ok) {
         throw new Error("Falha ao buscar QR Code");
@@ -107,6 +128,11 @@ export const evolutionApi = {
           qrcode: true,
         }),
       });
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("text/html")) {
+        throw new Error("A URL da API retornou HTML. Verifique a configuração.");
+      }
 
       return response.ok;
     } catch (error) {
@@ -153,11 +179,25 @@ export const evolutionApi = {
           body: JSON.stringify({
             number: phone,
             text: message,
+            options: {
+              delay: 1200,
+              presence: "composing",
+            },
           }),
         }
       );
 
-      return response.ok;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("text/html")) {
+        throw new Error("A URL da API retornou HTML. Verifique a configuração.");
+      }
+
+      if (!response.ok) {
+        console.error("Erro ao enviar mensagem:", await response.text());
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
       return false;

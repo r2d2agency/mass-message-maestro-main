@@ -33,6 +33,10 @@ export function useEvolution() {
     try {
       const state = await evolutionApi.checkInstanceStatus(config);
       setConnectionState(state);
+
+      if (state.error) {
+        toast.error(state.error);
+      }
       
       if (state.status === "connected") {
         setQrCode(null);

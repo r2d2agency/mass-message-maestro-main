@@ -144,6 +144,14 @@ const Conexoes = () => {
       const state = await evolutionApi.checkInstanceStatus(config);
       setConnectionState(state);
       
+      if (state.error) {
+         toast({
+            title: "Erro na conexão",
+            description: state.error,
+            variant: "destructive"
+         });
+      }
+
       if (state.status === "connected") {
         setQrCode(null);
         // Update status in local list optimistically
