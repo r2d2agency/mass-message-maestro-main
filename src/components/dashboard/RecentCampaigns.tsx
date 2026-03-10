@@ -30,6 +30,8 @@ interface ApiCampaign {
 interface RecentCampaignsProps {
   startDate?: string;
   endDate?: string;
+  connectionId?: string;
+  campaignIds?: string[];
 }
 
 const statusConfig = {
@@ -59,7 +61,12 @@ const statusConfig = {
   },
 };
 
-export function RecentCampaigns({ startDate, endDate }: RecentCampaignsProps) {
+export function RecentCampaigns({
+  startDate,
+  endDate,
+  connectionId,
+  campaignIds,
+}: RecentCampaignsProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -72,6 +79,10 @@ export function RecentCampaigns({ startDate, endDate }: RecentCampaignsProps) {
         params.set("limit", "3");
         if (startDate) params.set("startDate", startDate);
         if (endDate) params.set("endDate", endDate);
+        if (connectionId) params.set("connectionId", connectionId);
+        if (campaignIds && campaignIds.length > 0) {
+          params.set("campaignIds", campaignIds.join(","));
+        }
         const data = await api<ApiCampaign[]>(`/api/campaigns?${params.toString()}`);
 
         const mapped = data.slice(0, 3).map((campaign) => {
@@ -119,7 +130,7 @@ export function RecentCampaigns({ startDate, endDate }: RecentCampaignsProps) {
     };
 
     loadRecentCampaigns();
-  }, [toast, startDate, endDate]);
+  }, [toast, startDate, endDate, connectionId, campaignIds]);
 
   return (
     <div className="rounded-xl bg-card p-6 shadow-card border border-border animate-fade-in">

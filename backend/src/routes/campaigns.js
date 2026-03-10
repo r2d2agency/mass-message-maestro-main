@@ -32,9 +32,33 @@ function parseDateRange({ startDate, endDate }) {
   return { startAt, endAt };
 }
 
+function parseUuid(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function parseUuidList(value) {
+  if (typeof value !== 'string') return null;
+  const items = value
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map(parseUuid)
+    .filter((v) => v !== null);
+
+  if (items.length === 0) return null;
+  return items;
+}
+
 router.get('/dashboard/stats', async (req, res) => {
   try {
     const { startAt, endAt } = parseDateRange(req.query);
+    const connectionId = parseUuid(req.query.connectionId);
+    const campaignIds = parseUuidList(req.query.campaignIds);
 
     const messageStatsResult = await query(
       `WITH accessible_campaigns AS (
@@ -43,6 +67,8 @@ router.get('/dashboard/stats', async (req, res) => {
         WHERE c.user_id IN (
           SELECT id FROM users WHERE id = $1 OR manager_id = $1
         )
+          AND ($4::uuid IS NULL OR c.connection_id = $4)
+          AND ($5::uuid[] IS NULL OR c.id = ANY($5))
       ),
       filtered_messages AS (
         SELECT cm.status, cm.campaign_id
@@ -56,7 +82,7 @@ router.get('/dashboard/stats', async (req, res) => {
         COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
         COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
       FROM filtered_messages`,
-      [req.userId, startAt, endAt]
+      [req.userId, startAt, endAt, connectionId, campaignIds]
     );
 
     const campaignStatsResult = await query(
@@ -65,12 +91,16 @@ router.get('/dashboard/stats', async (req, res) => {
           WHERE ($2::timestamptz IS NULL OR COALESCE(c.scheduled_at, c.created_at) >= $2)
             AND ($3::timestamptz IS NULL OR COALESCE(c.scheduled_at, c.created_at) <= $3)
         )::int AS total_in_period,
-        COUNT(*) FILTER (WHERE c.status = 'running')::int AS active_now
+        COUNT(*) FILTER (
+          WHERE c.status = 'running'
+        )::int AS active_now
       FROM campaigns c
       WHERE c.user_id IN (
         SELECT id FROM users WHERE id = $1 OR manager_id = $1
-      )`,
-      [req.userId, startAt, endAt]
+      )
+        AND ($4::uuid IS NULL OR c.connection_id = $4)
+        AND ($5::uuid[] IS NULL OR c.id = ANY($5))`,
+      [req.userId, startAt, endAt, connectionId, campaignIds]
     );
 
     const messageStats = messageStatsResult.rows[0] || {
@@ -108,6 +138,8 @@ router.get('/dashboard/stats', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { startAt, endAt } = parseDateRange(req.query);
+    const connectionId = parseUuid(req.query.connectionId);
+    const campaignIds = parseUuidList(req.query.campaignIds);
     const limitRaw = req.query.limit;
     const limitParsed = typeof limitRaw === 'string' ? Number(limitRaw) : null;
     const limit = Number.isFinite(limitParsed) && limitParsed > 0 ? Math.floor(limitParsed) : null;
@@ -121,6 +153,14 @@ router.get('/', async (req, res) => {
     if (endAt) {
       params.push(endAt);
       whereExtra += ` AND COALESCE(c.scheduled_at, c.created_at) <= $${params.length}`;
+    }
+    if (connectionId) {
+      params.push(connectionId);
+      whereExtra += ` AND c.connection_id = $${params.length}`;
+    }
+    if (campaignIds) {
+      params.push(campaignIds);
+      whereExtra += ` AND c.id = ANY($${params.length}::uuid[])`;
     }
     if (limit) {
       params.push(limit);
