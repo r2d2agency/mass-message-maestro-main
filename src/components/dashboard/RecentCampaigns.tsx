@@ -27,6 +27,11 @@ interface ApiCampaign {
   created_at: string;
 }
 
+interface RecentCampaignsProps {
+  startDate?: string;
+  endDate?: string;
+}
+
 const statusConfig = {
   scheduled: {
     icon: Calendar,
@@ -54,7 +59,7 @@ const statusConfig = {
   },
 };
 
-export function RecentCampaigns() {
+export function RecentCampaigns({ startDate, endDate }: RecentCampaignsProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -63,7 +68,11 @@ export function RecentCampaigns() {
     const loadRecentCampaigns = async () => {
       try {
         setIsLoading(true);
-        const data = await api<ApiCampaign[]>("/api/campaigns");
+        const params = new URLSearchParams();
+        params.set("limit", "3");
+        if (startDate) params.set("startDate", startDate);
+        if (endDate) params.set("endDate", endDate);
+        const data = await api<ApiCampaign[]>(`/api/campaigns?${params.toString()}`);
 
         const mapped = data.slice(0, 3).map((campaign) => {
           const sent = Number(campaign.sent_count) || 0;
@@ -110,7 +119,7 @@ export function RecentCampaigns() {
     };
 
     loadRecentCampaigns();
-  }, [toast]);
+  }, [toast, startDate, endDate]);
 
   return (
     <div className="rounded-xl bg-card p-6 shadow-card border border-border animate-fade-in">
@@ -130,6 +139,11 @@ export function RecentCampaigns() {
         {isLoading && campaigns.length === 0 && (
           <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
             Carregando campanhas recentes...
+          </div>
+        )}
+        {!isLoading && campaigns.length === 0 && (
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+            Nenhuma campanha encontrada no período selecionado.
           </div>
         )}
         {campaigns.map((campaign) => {

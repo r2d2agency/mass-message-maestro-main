@@ -5,16 +5,30 @@ import { RecentCampaigns } from "@/components/dashboard/RecentCampaigns";
 import { Users, MessageSquare, Send, CheckCircle2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface ApiContact {
   id: string;
 }
 
-interface ApiCampaign {
-  id: string;
-  status: "pending" | "running" | "paused" | "completed" | "cancelled";
-  sent_count: string;
-  failed_count: string;
+interface ApiDashboardStatsResponse {
+  messages: {
+    total: number | string;
+    sent: number | string;
+    failed: number | string;
+  };
+  campaigns: {
+    totalInPeriod: number | string;
+    activeNow: number | string;
+  };
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 const Index = () => {
@@ -25,31 +39,35 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return formatDateInput(d);
+  });
+  const [endDate, setEndDate] = useState(() => formatDateInput(new Date()));
+
   useEffect(() => {
     const loadStats = async () => {
       try {
         setIsLoading(true);
-        const [contacts, campaigns] = await Promise.all([
+        const params = new URLSearchParams();
+        params.set("startDate", startDate);
+        params.set("endDate", endDate);
+
+        const [contacts, dashboard] = await Promise.all([
           api<ApiContact[]>("/api/contacts"),
-          api<ApiCampaign[]>("/api/campaigns"),
+          api<ApiDashboardStatsResponse>(`/api/campaigns/dashboard/stats?${params.toString()}`),
         ]);
 
         setTotalContacts(contacts.length);
 
-        const active = campaigns.filter((c) => c.status === "running").length;
-        setActiveCampaigns(active);
+        const sent = Number(dashboard.messages.sent) || 0;
+        const failed = Number(dashboard.messages.failed) || 0;
+        const total = Number(dashboard.messages.total) || sent + failed;
 
-        const sent = campaigns.reduce(
-          (sum, c) => sum + (Number(c.sent_count) || 0),
-          0
-        );
-        const failed = campaigns.reduce(
-          (sum, c) => sum + (Number(c.failed_count) || 0),
-          0
-        );
         setSentMessages(sent);
+        setActiveCampaigns(Number(dashboard.campaigns.totalInPeriod) || 0);
 
-        const total = sent + failed;
         const rate = total > 0 ? (sent / total) * 100 : 0;
         setDeliveryRate(rate);
       } catch (error) {
@@ -65,17 +83,38 @@ const Index = () => {
     };
 
     loadStats();
-  }, [toast]);
+  }, [toast, startDate, endDate]);
 
   return (
     <MainLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div className="animate-slide-up">
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="mt-1 text-muted-foreground">
-            Visão geral do seu sistema de disparo de mensagens
-          </p>
+        <div className="animate-slide-up flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <p className="mt-1 text-muted-foreground">
+              Visão geral do seu sistema de disparo de mensagens
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">De</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Até</Label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -96,13 +135,13 @@ const Index = () => {
                 ? "Carregando..."
                 : sentMessages.toLocaleString("pt-BR")
             }
-            description="Somatório das campanhas"
+            description="No período"
             icon={<Send className="h-6 w-6 text-primary" />}
           />
           <StatsCard
-            title="Campanhas Ativas"
+            title="Campanhas"
             value={isLoading ? "Carregando..." : activeCampaigns}
-            description="Em execução agora"
+            description="No período"
             icon={<MessageSquare className="h-6 w-6 text-primary" />}
           />
           <StatsCard
@@ -112,14 +151,14 @@ const Index = () => {
                 ? "Carregando..."
                 : `${deliveryRate.toFixed(1)}%`
             }
-            description="Média geral"
+            description="No período"
             icon={<CheckCircle2 className="h-6 w-6 text-primary" />}
           />
         </div>
 
         {/* Recent Campaigns */}
         <div className="grid gap-6 lg:grid-cols-2">
-          <RecentCampaigns />
+          <RecentCampaigns startDate={startDate} endDate={endDate} />
           
           {/* Quick Actions */}
           <div className="rounded-xl bg-card p-6 shadow-card border border-border animate-fade-in">

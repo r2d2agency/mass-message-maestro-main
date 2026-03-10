@@ -6,8 +6,126 @@ import { scheduleCampaign, recalibrateCampaign } from '../services/scheduler.js'
 const router = Router();
 router.use(authenticate);
 
+function parseDateRange({ startDate, endDate }) {
+  const normalize = (value, boundary) => {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+    const iso =
+      boundary === 'start'
+        ? `${trimmed}T00:00:00.000Z`
+        : `${trimmed}T23:59:59.999Z`;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  };
+
+  let startAt = normalize(startDate, 'start');
+  let endAt = normalize(endDate, 'end');
+
+  if (startAt && endAt && startAt > endAt) {
+    const tmp = startAt;
+    startAt = endAt;
+    endAt = tmp;
+  }
+
+  return { startAt, endAt };
+}
+
+router.get('/dashboard/stats', async (req, res) => {
+  try {
+    const { startAt, endAt } = parseDateRange(req.query);
+
+    const messageStatsResult = await query(
+      `WITH accessible_campaigns AS (
+        SELECT c.id
+        FROM campaigns c
+        WHERE c.user_id IN (
+          SELECT id FROM users WHERE id = $1 OR manager_id = $1
+        )
+      ),
+      filtered_messages AS (
+        SELECT cm.status, cm.campaign_id
+        FROM campaign_messages cm
+        INNER JOIN accessible_campaigns ac ON ac.id = cm.campaign_id
+        WHERE ($2::timestamptz IS NULL OR COALESCE(cm.sent_at, cm.scheduled_for, cm.created_at) >= $2)
+          AND ($3::timestamptz IS NULL OR COALESCE(cm.sent_at, cm.scheduled_for, cm.created_at) <= $3)
+      )
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
+        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+      FROM filtered_messages`,
+      [req.userId, startAt, endAt]
+    );
+
+    const campaignStatsResult = await query(
+      `SELECT
+        COUNT(*) FILTER (
+          WHERE ($2::timestamptz IS NULL OR COALESCE(c.scheduled_at, c.created_at) >= $2)
+            AND ($3::timestamptz IS NULL OR COALESCE(c.scheduled_at, c.created_at) <= $3)
+        )::int AS total_in_period,
+        COUNT(*) FILTER (WHERE c.status = 'running')::int AS active_now
+      FROM campaigns c
+      WHERE c.user_id IN (
+        SELECT id FROM users WHERE id = $1 OR manager_id = $1
+      )`,
+      [req.userId, startAt, endAt]
+    );
+
+    const messageStats = messageStatsResult.rows[0] || {
+      total: 0,
+      sent: 0,
+      failed: 0,
+    };
+
+    const campaignStats = campaignStatsResult.rows[0] || {
+      total_in_period: 0,
+      active_now: 0,
+    };
+
+    res.json({
+      range: {
+        startDate: startAt ? startAt.toISOString().slice(0, 10) : null,
+        endDate: endAt ? endAt.toISOString().slice(0, 10) : null,
+      },
+      messages: {
+        total: Number(messageStats.total) || 0,
+        sent: Number(messageStats.sent) || 0,
+        failed: Number(messageStats.failed) || 0,
+      },
+      campaigns: {
+        totalInPeriod: Number(campaignStats.total_in_period) || 0,
+        activeNow: Number(campaignStats.active_now) || 0,
+      },
+    });
+  } catch (error) {
+    console.error('Get dashboard stats error:', error);
+    res.status(500).json({ error: 'Erro ao buscar estatísticas do dashboard' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
+    const { startAt, endAt } = parseDateRange(req.query);
+    const limitRaw = req.query.limit;
+    const limitParsed = typeof limitRaw === 'string' ? Number(limitRaw) : null;
+    const limit = Number.isFinite(limitParsed) && limitParsed > 0 ? Math.floor(limitParsed) : null;
+
+    const params = [req.userId];
+    let whereExtra = '';
+    if (startAt) {
+      params.push(startAt);
+      whereExtra += ` AND COALESCE(c.scheduled_at, c.created_at) >= $${params.length}`;
+    }
+    if (endAt) {
+      params.push(endAt);
+      whereExtra += ` AND COALESCE(c.scheduled_at, c.created_at) <= $${params.length}`;
+    }
+    if (limit) {
+      params.push(limit);
+    }
+
     const result = await query(
       `SELECT c.*, 
               cl.name as list_name,
@@ -20,8 +138,10 @@ router.get('/', async (req, res) => {
        WHERE c.user_id IN (
          SELECT id FROM users WHERE id = $1 OR manager_id = $1
        )
-       ORDER BY c.created_at DESC`,
-      [req.userId]
+       ${whereExtra}
+       ORDER BY c.created_at DESC
+       ${limit ? `LIMIT $${params.length}` : ''}`,
+      params
     );
     res.json(result.rows);
   } catch (error) {
